@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -190,7 +190,7 @@ const formatDateTime = (date) => {
   }
 };
 
-const Dashboard = () => {
+const Dashboard = memo(() => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
@@ -1089,14 +1089,14 @@ const Dashboard = () => {
                           </ListItemAvatar>
                           <ListItemText
                             primary={
-                              <Typography variant="h6" component="div" sx={{ mb: 0.5 }}>
+                              <Typography component="div" variant="h6" sx={{ mb: 0.5 }}>
                                 {pdf.name}
                               </Typography>
                             }
                             secondary={
-                              <React.Fragment>
+                              <Box component="div">
                                 <Typography 
-                                  component="span" 
+                                  component="div" 
                                   variant="body1" 
                                   color="text.primary"
                                   sx={{ display: 'block', mb: 1 }}
@@ -1107,6 +1107,7 @@ const Dashboard = () => {
                                   direction="row" 
                                   spacing={2} 
                                   alignItems="center"
+                                  component="div"
                                 >
                                   <Typography 
                                     component="span" 
@@ -1136,7 +1137,7 @@ const Dashboard = () => {
                                     {pdf.downloads} downloads
                                   </Typography>
                                 </Stack>
-                              </React.Fragment>
+                              </Box>
                             }
                           />
                         </SearchResultItem>
@@ -1435,10 +1436,9 @@ const Dashboard = () => {
                                 </Avatar>
                               </ListItemAvatar>
                               <ListItemText
-                                primary={pdf.name}
-                                secondary={
-                                  <Typography component="span" variant="body2" color="text.secondary">
-                                    <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
+                                primary={
+                                  <Typography component="div" variant="body2" color="text.secondary">
+                                    <Stack direction="row" spacing={2} sx={{ mt: 0.5 }} component="div">
                                       <Typography component="span" variant="caption" color="text.secondary">
                                         {formatDate(pdf.updatedAt)}
                                       </Typography>
@@ -1524,12 +1524,12 @@ const Dashboard = () => {
                               </ListItemAvatar>
                               <ListItemText
                                 primary={
-                                  <Typography variant="body1">
+                                  <Typography component="div" variant="body1">
                                     {String(activity.user?.name || 'Unknown user')} {activity.type === 'comment' ? 'commented on' : activity.type === 'view' ? 'viewed' : 'downloaded'} {String(activity.pdfName || '')}
                                   </Typography>
                                 }
                                 secondary={
-                                  <Typography variant="caption" color="text.secondary">
+                                  <Typography component="span" variant="caption" color="text.secondary">
                                     {activity.timestamp ? formatDate(new Date(activity.timestamp)) : 'Unknown date'}
                                   </Typography>
                                 }
@@ -1599,10 +1599,9 @@ const Dashboard = () => {
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText
-                          primary={pdf.name}
-                          secondary={
-                            <Typography component="span" variant="body2" color="text.secondary">
-                              <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
+                          primary={
+                            <Typography component="div" variant="body2" color="text.secondary">
+                              <Stack direction="row" spacing={2} sx={{ mt: 0.5 }} component="div">
                                 <Typography component="span" variant="caption" color="text.secondary">
                                   {formatDate(pdf.updatedAt)}
                                 </Typography>
@@ -1612,21 +1611,6 @@ const Dashboard = () => {
                                 <Typography component="span" variant="caption" color="text.secondary">
                                   {pdf.downloads} downloads
                                 </Typography>
-                                {pdf.description && (
-                                  <Typography 
-                                    component="span" 
-                                    variant="caption" 
-                                    color="text.secondary"
-                                    sx={{
-                                      maxWidth: '300px',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                  >
-                                    {pdf.description}
-                                  </Typography>
-                                )}
                               </Stack>
                             </Typography>
                           }
@@ -2034,32 +2018,25 @@ const Dashboard = () => {
                         {comment.user?.name?.[0]?.toUpperCase() || 'A'}
                       </Avatar>
                     </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography component="span" variant="subtitle2" sx={{ fontWeight: 600 }}>
-                            {comment.user?.name || 'Anonymous'}
-                          </Typography>
-                          <Typography component="span" variant="caption" color="text.secondary">
-                            {formatDateTime(comment.createdAt)}
-                          </Typography>
-                        </Box>
-                      }
-                      secondary={
-                        <Box sx={{ mt: 1 }}>
-                          <Typography variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap' }}>
-                            {comment.content}
-                          </Typography>
-                          <Button
-                            size="small"
-                            onClick={() => setReplyTo(comment._id)}
-                            sx={{ mt: 1 }}
-                          >
-                            Reply
-                          </Button>
-                        </Box>
-                      }
-                    />
+                    <Box sx={{ flex: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Typography component="span" variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          {comment.user?.name || 'Anonymous'}
+                        </Typography>
+                        <Typography component="span" variant="caption" color="text.secondary">
+                          {formatDateTime(comment.createdAt)}
+                        </Typography>
+                      </Box>
+                      <Typography component="div" variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
+                        {comment.content}
+                      </Typography>
+                      <Button
+                        size="small"
+                        onClick={() => setReplyTo(comment._id)}
+                      >
+                        Reply
+                      </Button>
+                    </Box>
                   </ListItem>
 
                   {/* Replies */}
@@ -2070,23 +2047,19 @@ const Dashboard = () => {
                           {reply.user?.name?.[0]?.toUpperCase() || 'A'}
                         </Avatar>
                       </ListItemAvatar>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography component="span" variant="subtitle2" sx={{ fontWeight: 600 }}>
-                              {reply.user?.name || 'Anonymous'}
-                            </Typography>
-                            <Typography component="span" variant="caption" color="text.secondary">
-                              {formatDateTime(reply.createdAt)}
-                            </Typography>
-                          </Box>
-                        }
-                        secondary={
-                          <Typography variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap' }}>
-                            {reply.content}
+                      <Box sx={{ flex: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <Typography component="span" variant="subtitle2" sx={{ fontWeight: 600 }}>
+                            {reply.user?.name || 'Anonymous'}
                           </Typography>
-                        }
-                      />
+                          <Typography component="span" variant="caption" color="text.secondary">
+                            {formatDateTime(reply.createdAt)}
+                          </Typography>
+                        </Box>
+                        <Typography component="div" variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {reply.content}
+                        </Typography>
+                      </Box>
                     </ListItem>
                   ))}
 
@@ -2157,6 +2130,11 @@ const Dashboard = () => {
       </Box>
     </Box>
   );
-};
+});
+
+// Add HMR handling
+if (module.hot) {
+  module.hot.accept();
+}
 
 export default Dashboard; 
