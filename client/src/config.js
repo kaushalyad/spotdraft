@@ -1,6 +1,5 @@
 const config = {
-  // Local development backend URL
-  API_URL: 'http://localhost:5000'
+  API_URL: 'https://spotdraft-backend.onrender.com'  // Render API URL
 };
 
 export default config; 
