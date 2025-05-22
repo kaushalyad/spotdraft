@@ -82,6 +82,8 @@ import { styled } from '@mui/material/styles';
 import { debounce } from 'lodash';
 import { format } from 'date-fns';
 import config from '../config';
+import Analytics from './Analytics';
+import Settings from './Settings';
 
 // Add API URL constant
 const API_URL = config.API_URL;
@@ -191,6 +193,14 @@ const formatDateTime = (date) => {
   }
 };
 
+const calculateTotalComments = (comments) => {
+  if (!comments || !Array.isArray(comments)) return 0;
+  return comments.reduce((total, comment) => {
+    const replyCount = comment.replies ? comment.replies.length : 0;
+    return total + 1 + replyCount;
+  }, 0);
+};
+
 const Dashboard = memo(() => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -206,7 +216,6 @@ const Dashboard = memo(() => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [user, setUser] = useState(() => {
     const storedUser = localStorage.getItem('user');
-    console.log('Initializing user from localStorage:', storedUser);
     return storedUser ? JSON.parse(storedUser) : null;
   });
   const [anchorEl, setAnchorEl] = useState(null);
@@ -238,6 +247,18 @@ const Dashboard = memo(() => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [error, setError] = useState(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    const storedMode = localStorage.getItem('darkMode');
+    return storedMode ? JSON.parse(storedMode) : false;
+  });
+
+  // Add theme toggle handler
+  const handleThemeToggle = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    localStorage.setItem('darkMode', JSON.stringify(newMode));
+    // You can add additional theme switching logic here if needed
+  };
 
   // Enhanced search function
   const handleSearch = async (query) => {
@@ -634,7 +655,7 @@ const Dashboard = memo(() => {
       }
 
       console.log('Fetching dashboard data');
-      const response = await fetch(`${API_URL}/dashboard`, {
+      const response = await fetch(`${API_URL}/api/dashboard`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -647,19 +668,26 @@ const Dashboard = memo(() => {
       
       if (response.ok) {
         // Format the data before setting state
-        setStats({
+        const formattedStats = {
           totalPdfs: data.stats?.totalPdfs || 0,
           totalComments: data.stats?.totalComments || 0,
           totalViews: data.stats?.totalViews || 0,
           totalDownloads: data.stats?.totalDownloads || 0
-        });
+        };
+        
+        console.log('Dashboard stats received:', data.stats);
+        console.log('Formatted stats:', formattedStats);
+        setStats(formattedStats);
 
         // Format recent PDFs to ensure views and downloads are numbers
-        setRecentPdfs(data.recentPdfs.map(pdf => ({
+        const formattedRecentPdfs = data.recentPdfs.map(pdf => ({
           ...pdf,
           views: Array.isArray(pdf.views) ? pdf.views.length : 0,
           downloads: Array.isArray(pdf.downloads) ? pdf.downloads.length : 0
-        })));
+        }));
+        
+        console.log('Formatted recent PDFs:', formattedRecentPdfs);
+        setRecentPdfs(formattedRecentPdfs);
 
         // Update recent activity
         setRecentActivity(data.recentActivity || []);
@@ -943,12 +971,9 @@ const Dashboard = memo(() => {
           </ListItemIcon>
           <ListItemText primary="Analytics" />
         </ListItem>
-      </List>
-      <Divider />
-      <List>
-        <ListItem button>
+        <ListItem button selected={selectedTab === 4} onClick={() => setSelectedTab(4)}>
           <ListItemIcon>
-            <SettingsIcon />
+            <SettingsIcon color={selectedTab === 4 ? 'primary' : 'inherit'} />
           </ListItemIcon>
           <ListItemText primary="Settings" />
         </ListItem>
@@ -985,7 +1010,7 @@ const Dashboard = memo(() => {
   if (!user) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <Typography>Loading user profile...</Typography>
+        <CircularProgress />
       </Box>
     );
   }
@@ -1248,6 +1273,7 @@ const Dashboard = memo(() => {
               <Tab label="My PDFs" />
               <Tab label="Shared with me" />
               <Tab label="Analytics" />
+              <Tab label="Settings" />
             </Tabs>
           </Box>
 
@@ -1438,6 +1464,11 @@ const Dashboard = memo(() => {
                               </ListItemAvatar>
                               <ListItemText
                                 primary={
+                                  <Typography variant="h6" component="div" sx={{ mb: 0.5 }}>
+                                    {pdf.name}
+                                  </Typography>
+                                }
+                                secondary={
                                   <Typography component="div" variant="body2" color="text.secondary">
                                     <Stack direction="row" spacing={2} sx={{ mt: 0.5 }} component="div">
                                       <Typography component="span" variant="caption" color="text.secondary">
@@ -1460,9 +1491,17 @@ const Dashboard = memo(() => {
                                     onClick={(e) => handleCommentClick(pdf, e)}
                                   >
                                     <Badge 
-                                      badgeContent={pdf.comments?.length || 0} 
+                                      badgeContent={calculateTotalComments(pdf.comments)} 
                                       color="primary"
                                       max={99}
+                                      sx={{
+                                        '& .MuiBadge-badge': {
+                                          fontSize: '0.75rem',
+                                          height: '20px',
+                                          minWidth: '20px',
+                                          borderRadius: '10px'
+                                        }
+                                      }}
                                     >
                                       <CommentIcon />
                                     </Badge>
@@ -1601,6 +1640,11 @@ const Dashboard = memo(() => {
                         </ListItemAvatar>
                         <ListItemText
                           primary={
+                            <Typography variant="h6" component="div" sx={{ mb: 0.5 }}>
+                              {pdf.name}
+                            </Typography>
+                          }
+                          secondary={
                             <Typography component="div" variant="body2" color="text.secondary">
                               <Stack direction="row" spacing={2} sx={{ mt: 0.5 }} component="div">
                                 <Typography component="span" variant="caption" color="text.secondary">
@@ -1623,9 +1667,17 @@ const Dashboard = memo(() => {
                               onClick={(e) => handleCommentClick(pdf, e)}
                             >
                               <Badge 
-                                badgeContent={pdf.comments?.length || 0} 
+                                badgeContent={calculateTotalComments(pdf.comments)} 
                                 color="primary"
                                 max={99}
+                                sx={{
+                                  '& .MuiBadge-badge': {
+                                    fontSize: '0.75rem',
+                                    height: '20px',
+                                    minWidth: '20px',
+                                    borderRadius: '10px'
+                                  }
+                                }}
                               >
                                 <CommentIcon />
                               </Badge>
@@ -1690,8 +1742,21 @@ const Dashboard = memo(() => {
 
           {selectedTab === 3 && (
             <Paper sx={{ p: 2, borderRadius: 2 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Analytics</Typography>
-              {/* Analytics content */}
+              <Analytics />
+            </Paper>
+          )}
+
+          {selectedTab === 4 && (
+            <Paper sx={{ p: 2, borderRadius: 2 }}>
+              {user ? (
+                <Settings onThemeToggle={handleThemeToggle} user={user} />
+              ) : (
+                <Box sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography color="error">
+                    Please log in to access settings
+                  </Typography>
+                </Box>
+              )}
             </Paper>
           )}
         </Box>

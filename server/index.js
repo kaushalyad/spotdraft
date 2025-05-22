@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
-mongoose.set('strictQuery', false);
 const cors = require('cors');
 const path = require('path');
 const app = express();
@@ -9,36 +8,24 @@ const app = express();
 // Enhanced error handling for uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  process.exit(1);
+  // Don't exit in development
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
 });
 
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Rejection:', err);
-  process.exit(1);
+  // Don't exit in development
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
 });
 
 // Middleware
 app.use(cors({
-  origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma', 'Origin', 'X-Requested-With'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  exposedHeaders: ['Content-Disposition', 'Content-Type'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
-  maxAge: 86400 // 24 hours
-}));
-
-// Handle preflight requests
-app.options('*', cors({
-  origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma', 'Origin', 'X-Requested-With'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  exposedHeaders: ['Content-Disposition', 'Content-Type'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
-  maxAge: 86400 // 24 hours
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true
 }));
 
 app.use(express.json());
@@ -68,40 +55,34 @@ app.get('/health', (req, res) => {
 });
 
 // Serve static files from the uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.pdf')) {
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', 'inline');
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+    }
+  }
+}));
 
-// Connect to MongoDB with enhanced error handling
+// MongoDB connection function
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/spotdraft';
-    console.log('Attempting to connect to MongoDB...');
-    
-    const options = {
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 30000, // Increase timeout to 30 seconds
-      socketTimeoutMS: 45000,
-      family: 4, // Force IPv4
-      retryWrites: true,
-      w: 'majority',
-      maxPoolSize: 10,
-      minPoolSize: 5,
-      maxIdleTimeMS: 30000,
-      connectTimeoutMS: 30000,
-    };
-
-    await mongoose.connect(mongoURI, options);
-    console.log('MongoDB connected successfully');
-  } catch (err) {
-    console.error('MongoDB connection error:', {
-      message: err.message,
-      name: err.name,
-      code: err.code,
-      stack: err.stack
+      useUnifiedTopology: true
     });
-    
-    // Don't exit the process, just log the error
-    console.log('Will retry connection in 5 seconds...');
+    console.log('MongoDB connected successfully');
+    return conn;
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    // Don't exit in development
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+    // Retry connection after 5 seconds
     setTimeout(connectDB, 5000);
   }
 };
@@ -116,10 +97,6 @@ mongoose.connection.on('disconnected', () => {
   setTimeout(connectDB, 5000);
 });
 
-mongoose.connection.on('reconnected', () => {
-  console.log('MongoDB reconnected successfully');
-});
-
 // Initial connection
 connectDB();
 
@@ -127,68 +104,23 @@ connectDB();
 const authRoutes = require('./routes/auth');
 const pdfRoutes = require('./routes/pdf');
 const dashboardRoutes = require('./routes/dashboard');
+const analyticsRoutes = require('./routes/analytics');
+const userRoutes = require('./routes/user');
 
 // Register routes
 app.use('/auth', authRoutes);
 app.use('/pdf', pdfRoutes);
-app.use('/dashboard', dashboardRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/user', userRoutes);
 
-// Test route
-app.get('/test', (req, res) => {
-  res.json({ 
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../client/build')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
   });
-});
-
-// Status endpoint to show API is working
-app.get('/status', (req, res) => {
-  res.status(200).json({
-    status: 'API is working',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    message: 'Server is up and running',
-    version: '1.0.0'
-  });
-});
-
-// Root route
-app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'Welcome to SpotDraft API',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    version: '1.0.0',
-    endpoints: {
-      auth: '/auth',
-      pdf: '/pdf',
-      dashboard: '/dashboard',
-      status: '/status',
-      health: '/health'
-    }
-  });
-});
-
-// Enhanced error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Server error:', {
-    error: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-    body: req.body,
-    headers: req.headers,
-    timestamp: new Date().toISOString()
-  });
-  
-  res.status(err.status || 500).json({
-    message: err.message || 'Server error',
-    error: process.env.NODE_ENV === 'development' ? err : undefined,
-    timestamp: new Date().toISOString()
-  });
-});
+}
 
 // 404 handler - must be last
 app.use((req, res) => {
@@ -211,10 +143,19 @@ app.use((req, res) => {
   });
 });
 
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err : {}
+  });
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log('Environment:', process.env.NODE_ENV || 'development');
-  console.log('MongoDB URI:', process.env.MONGODB_URI || 'mongodb://localhost:27017/spotdraft');
+  console.log('MongoDB URI:', process.env.MONGODB_URI);
   console.log('Server start time:', new Date().toISOString());
 }); 

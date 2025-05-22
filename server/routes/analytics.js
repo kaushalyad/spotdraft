@@ -82,11 +82,25 @@ router.get('/', auth, async (req, res) => {
       }
     ]);
 
-    // Get top 5 PDFs by views
-    const topPdfs = await PDF.find({ owner: userId })
-      .sort({ 'views.length': -1 })
-      .limit(5)
-      .select('name views downloads');
+    // Get top 5 PDFs by views with proper view and download counts
+    const topPdfs = await PDF.aggregate([
+      {
+        $match: { owner: userId }
+      },
+      {
+        $project: {
+          name: 1,
+          views: { $size: { $ifNull: ['$views', []] } },
+          downloads: { $size: { $ifNull: ['$downloads', []] } }
+        }
+      },
+      {
+        $sort: { views: -1 }
+      },
+      {
+        $limit: 5
+      }
+    ]);
 
     // Get recent user activity
     const userActivity = await PDF.aggregate([
@@ -97,7 +111,7 @@ router.get('/', auth, async (req, res) => {
         $project: {
           views: {
             $map: {
-              input: '$views',
+              input: { $ifNull: ['$views', []] },
               as: 'view',
               in: {
                 type: 'view',
@@ -108,7 +122,7 @@ router.get('/', auth, async (req, res) => {
           },
           downloads: {
             $map: {
-              input: '$downloads',
+              input: { $ifNull: ['$downloads', []] },
               as: 'download',
               in: {
                 type: 'download',
@@ -119,7 +133,7 @@ router.get('/', auth, async (req, res) => {
           },
           comments: {
             $map: {
-              input: '$comments',
+              input: { $ifNull: ['$comments', []] },
               as: 'comment',
               in: {
                 type: 'comment',
@@ -151,6 +165,20 @@ router.get('/', auth, async (req, res) => {
       }
     ]);
 
+    // Calculate total views and downloads
+    const totalStats = await PDF.aggregate([
+      {
+        $match: { owner: userId }
+      },
+      {
+        $group: {
+          _id: null,
+          totalViews: { $sum: { $size: { $ifNull: ['$views', []] } } },
+          totalDownloads: { $sum: { $size: { $ifNull: ['$downloads', []] } } }
+        }
+      }
+    ]);
+
     res.json({
       viewsByDay: viewsByDay.map(item => ({
         date: item._id,
@@ -160,18 +188,14 @@ router.get('/', auth, async (req, res) => {
         date: item._id,
         count: item.count
       })),
-      topPdfs: topPdfs.map(pdf => ({
-        _id: pdf._id,
-        name: pdf.name,
-        views: pdf.views.length,
-        downloads: pdf.downloads.length
-      })),
+      topPdfs,
       userActivity: userActivity.map(activity => ({
         ...activity,
         timestamp: activity.timestamp instanceof Date ? 
           activity.timestamp.toISOString() : 
           new Date(activity.timestamp).toISOString()
-      }))
+      })),
+      totalStats: totalStats[0] || { totalViews: 0, totalDownloads: 0 }
     });
   } catch (error) {
     console.error('Error fetching analytics:', error);

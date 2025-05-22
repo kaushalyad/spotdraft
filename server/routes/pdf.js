@@ -682,20 +682,77 @@ router.post('/shared/:token/verify', async (req, res) => {
 // Get PDF and comments
 router.get('/:id', auth, async (req, res) => {
   try {
+    console.log('PDF request received:', {
+      pdfId: req.params.id,
+      userId: req.user.id,
+      path: req.path,
+      method: req.method,
+      query: req.query,
+      headers: req.headers,
+      timestamp: new Date().toISOString()
+    });
+
     // Validate PDF ID format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid PDF ID format' });
+      console.log('Invalid PDF ID format:', req.params.id);
+      return res.status(400).json({ 
+        message: 'Invalid PDF ID format',
+        details: {
+          providedId: req.params.id,
+          expectedFormat: 'MongoDB ObjectId'
+        }
+      });
     }
 
-    // Find the PDF
+    // Find the PDF with detailed logging
+    console.log('Attempting to find PDF with ID:', req.params.id);
     const pdf = await PDF.findById(req.params.id)
       .populate('owner', 'name email')
       .populate('comments.user', 'name email')
       .populate('comments.replies.user', 'name email');
 
+    console.log('PDF lookup result:', {
+      found: !!pdf,
+      id: req.params.id,
+      pdf: pdf ? {
+        id: pdf._id,
+        name: pdf.name,
+        owner: pdf.owner ? pdf.owner._id.toString() : null,
+        filePath: pdf.filePath,
+        isPublic: pdf.isPublic,
+        sharedWith: pdf.sharedWith ? pdf.sharedWith.map(share => share.user.toString()) : []
+      } : null,
+      query: req.query,
+      userId: req.user.id,
+      timestamp: new Date().toISOString()
+    });
+
     if (!pdf) {
-      return res.status(404).json({ message: 'PDF not found' });
+      console.log('PDF not found in database:', {
+        pdfId: req.params.id,
+        userId: req.user.id,
+        query: req.query,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(404).json({ 
+        message: 'PDF not found',
+        details: {
+          pdfId: req.params.id,
+          userId: req.user.id,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
+
+    console.log('Found PDF:', {
+      id: pdf._id,
+      name: pdf.name,
+      owner: pdf.owner._id.toString(),
+      isPublic: pdf.isPublic,
+      sharedWith: pdf.sharedWith.map(share => share.user.toString()),
+      filePath: pdf.filePath,
+      timestamp: new Date().toISOString()
+    });
 
     // Check if user has permission to view the PDF
     const hasPermission = 
@@ -704,16 +761,49 @@ router.get('/:id', auth, async (req, res) => {
       pdf.isPublic;
 
     if (!hasPermission) {
-      return res.status(403).json({ message: 'Not authorized to view this PDF' });
+      console.log('User not authorized:', {
+        userId: req.user.id,
+        ownerId: pdf.owner._id.toString(),
+        isPublic: pdf.isPublic,
+        sharedWith: pdf.sharedWith.map(share => share.user.toString()),
+        timestamp: new Date().toISOString()
+      });
+      return res.status(403).json({ 
+        message: 'Not authorized to view this PDF',
+        details: {
+          userId: req.user.id,
+          ownerId: pdf.owner._id.toString(),
+          isPublic: pdf.isPublic,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
 
     // Construct absolute file path
     const uploadsDir = path.join(__dirname, '../uploads');
     const filePath = path.join(uploadsDir, path.basename(pdf.filePath));
 
+    console.log('Checking file path:', {
+      filePath,
+      exists: fs.existsSync(filePath),
+      originalPath: pdf.filePath,
+      uploadsDir,
+      dirExists: fs.existsSync(uploadsDir),
+      dirContents: fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : [],
+      timestamp: new Date().toISOString()
+    });
+
     // Check if file exists
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: 'PDF file not found' });
+      console.log('PDF file not found:', filePath);
+      return res.status(404).json({ 
+        message: 'PDF file not found',
+        details: {
+          filePath,
+          originalPath: pdf.filePath,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
 
     // Increment view count using the schema method
@@ -733,12 +823,32 @@ router.get('/:id', auth, async (req, res) => {
       filePath: pdf.filePath
     };
 
+    console.log('Sending PDF response:', {
+      id: response._id,
+      name: response.name,
+      totalComments: response.totalComments,
+      totalViews: response.totalViews,
+      totalDownloads: response.totalDownloads,
+      timestamp: new Date().toISOString()
+    });
+
     res.json(response);
   } catch (error) {
-    console.error('Error fetching PDF:', error);
+    console.error('Error fetching PDF:', {
+      error: error.message,
+      stack: error.stack,
+      pdfId: req.params.id,
+      userId: req.user.id,
+      timestamp: new Date().toISOString()
+    });
     res.status(500).json({ 
       message: 'Error fetching PDF',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: {
+        pdfId: req.params.id,
+        userId: req.user.id,
+        timestamp: new Date().toISOString()
+      }
     });
   }
 });
@@ -1015,25 +1125,75 @@ router.delete('/:id/comments/:commentId', auth, async (req, res) => {
 // Get PDF file
 router.get('/:id/file', auth, async (req, res) => {
   try {
+    console.log('PDF file request received:', {
+      pdfId: req.params.id,
+      userId: req.user.id,
+      path: req.path,
+      method: req.method,
+      headers: req.headers
+    });
+
     const pdf = await PDF.findById(req.params.id);
     if (!pdf) {
+      console.log('PDF not found:', req.params.id);
       return res.status(404).json({ message: 'PDF not found' });
     }
 
     // Check if user has access
-    if (pdf.owner.toString() !== req.user.id && 
-        !pdf.sharedWith.some(share => share.user.toString() === req.user.id)) {
+    const hasPermission = 
+      pdf.owner.toString() === req.user.id ||
+      pdf.sharedWith.some(share => share.user.toString() === req.user.id) ||
+      pdf.isPublic;
+
+    if (!hasPermission) {
+      console.log('User not authorized to access PDF:', {
+        userId: req.user.id,
+        ownerId: pdf.owner.toString(),
+        isPublic: pdf.isPublic
+      });
       return res.status(403).json({ message: 'Not authorized to access this PDF' });
     }
 
     // Increment view count
     await pdf.incrementViews();
 
-    // Serve the file
-    const filePath = path.join(__dirname, '..', pdf.filePath);
-    res.sendFile(filePath);
+    // Construct absolute file path
+    const filePath = path.join(__dirname, '..', 'uploads', path.basename(pdf.filePath));
+    console.log('Serving PDF file:', {
+      filePath,
+      exists: fs.existsSync(filePath),
+      originalPath: pdf.filePath
+    });
+
+    if (!fs.existsSync(filePath)) {
+      console.log('PDF file not found:', filePath);
+      return res.status(404).json({ message: 'PDF file not found' });
+    }
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${pdf.name}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    // Stream the file
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.on('error', (error) => {
+      console.error('Error streaming file:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Error streaming PDF file' });
+      }
+    });
+
+    fileStream.pipe(res);
   } catch (error) {
-    console.error('Error serving PDF file:', error);
+    console.error('Error serving PDF file:', {
+      error: error.message,
+      stack: error.stack,
+      pdfId: req.params.id,
+      userId: req.user?.id
+    });
     res.status(500).json({ message: 'Error serving PDF file' });
   }
 });
@@ -1138,15 +1298,12 @@ router.get('/shared/:token/file', async (req, res) => {
     }
 
     // Construct absolute file path
-    const filePath = path.join(uploadsDir, path.basename(pdf.filePath));
+    const filePath = path.join(__dirname, '..', 'uploads', path.basename(pdf.filePath));
     
     console.log('Serving shared PDF file:', {
       filePath,
       exists: fs.existsSync(filePath),
-      originalPath: pdf.filePath,
-      uploadsDir,
-      dirExists: fs.existsSync(uploadsDir),
-      dirContents: fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : []
+      originalPath: pdf.filePath
     });
 
     if (!fs.existsSync(filePath)) {

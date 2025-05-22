@@ -60,7 +60,11 @@ import {
   ZoomOut as ZoomOutIcon,
   RotateRight as RotateRightIcon,
   Fullscreen as FullscreenIcon,
-  FullscreenExit as FullscreenExitIcon
+  FullscreenExit as FullscreenExitIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  Visibility as VisibilityIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
@@ -117,6 +121,8 @@ export function PDFViewer() {
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(-1);
+  const [isRendering, setIsRendering] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const onDocumentLoadSuccess = ({ numPages }) => {
     setNumPages(numPages);
@@ -124,8 +130,13 @@ export function PDFViewer() {
   };
 
   const onDocumentLoadError = (error) => {
-    setError('Failed to load PDF document');
     console.error('Error loading PDF:', error);
+    setError('Failed to load PDF document. Please try again.');
+    setSnackbar({
+      open: true,
+      message: 'Failed to load PDF document. Please try again.',
+      severity: 'error'
+    });
   };
 
   const checkAuth = async () => {
@@ -164,10 +175,7 @@ export function PDFViewer() {
       setError(null);
       const token = localStorage.getItem('token');
       
-      // Check if this is a shared PDF access
-      const isSharedAccess = window.location.pathname.includes('/shared/');
-      
-      if (!isSharedAccess && !token) {
+      if (!token) {
         setError('Please log in to access this PDF');
         setSnackbar({
           open: true,
@@ -177,106 +185,40 @@ export function PDFViewer() {
         return;
       }
 
-      // First get the current user info
-      let currentUser = null;
-      if (token) {
-        const userResponse = await fetch(`${API_URL}/auth/verify`, {
-          headers: {
-            'x-auth-token': token
-          }
-        });
-        if (userResponse.ok) {
-          currentUser = await userResponse.json();
-        }
-      }
+      console.log('Fetching PDF with ID:', id);
+      console.log('Using token:', token ? 'Token exists' : 'No token');
 
-      // Then fetch the PDF metadata with populated user information
-      const metadataResponse = await fetch(`${API_URL}/pdf/${id}?populate=user`, {
+      const response = await fetch(`${API_URL}/pdf/${id}?populate=user`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'x-auth-token': token || ''
+          'x-auth-token': token
         }
       });
-      
-      let metadata;
-      try {
-        metadata = await metadataResponse.json();
-      } catch (error) {
-        console.error('Error parsing PDF metadata response:', error);
-        throw new Error('Invalid response from server');
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error response:', errorData);
+        throw new Error(errorData.message || `Failed to fetch PDF (Status: ${response.status})`);
       }
 
-      if (metadataResponse.ok) {
-        // Ensure comments have user information
-        if (metadata.comments) {
-          metadata.comments = metadata.comments.map(comment => {
-            // If user is just an ID, use the current user info if it matches
-            if (typeof comment.user === 'string' && currentUser && comment.user === currentUser.id) {
-              comment.user = {
-                id: currentUser.id,
-                name: currentUser.name
-              };
-            } else if (typeof comment.user === 'string') {
-              // If it's a different user ID, we need to fetch their info
-              comment.user = { name: 'Anonymous' };
-            }
-
-            // Handle replies similarly
-            if (comment.replies) {
-              comment.replies = comment.replies.map(reply => {
-                if (typeof reply.user === 'string' && currentUser && reply.user === currentUser.id) {
-                  reply.user = {
-                    id: currentUser.id,
-                    name: currentUser.name
-                  };
-                } else if (typeof reply.user === 'string') {
-                  reply.user = { name: 'Anonymous' };
-                }
-                return reply;
-              });
-            }
-
-            return comment;
-          });
-        }
-        setPdf(metadata);
-      } else {
-        console.error('Error fetching PDF metadata:', {
-          status: metadataResponse.status,
-          statusText: metadataResponse.statusText,
-          data: metadata
-        });
-
-        if (metadataResponse.status === 401) {
-          setError('Please log in to access this PDF');
-          setSnackbar({
-            open: true,
-            message: 'Please log in to access this PDF',
-            severity: 'error'
-          });
-        } else if (metadataResponse.status === 404) {
-          setError('PDF not found');
-          setSnackbar({
-            open: true,
-            message: 'PDF not found',
-            severity: 'error'
-          });
-        } else {
-          setError(metadata.message || 'Error fetching PDF');
-          setSnackbar({
-            open: true,
-            message: metadata.message || 'Error fetching PDF',
-            severity: 'error'
-          });
-        }
-      }
+      const data = await response.json();
+      console.log('PDF data received:', {
+        id: data._id,
+        name: data.name,
+        hasFilePath: !!data.filePath,
+        owner: data.owner ? data.owner._id : null
+      });
+      setPdf(data);
     } catch (error) {
       console.error('Error fetching PDF:', error);
-      setError('Failed to load PDF');
+      setError(error.message || 'Failed to load PDF');
       setSnackbar({
         open: true,
-        message: 'Error fetching PDF',
+        message: error.message || 'Failed to load PDF',
         severity: 'error'
       });
     } finally {
@@ -289,7 +231,7 @@ export function PDFViewer() {
     url: `${API_URL}/pdf/${id}/file`,
     httpHeaders: {
       'Content-Type': 'application/pdf',
-      'x-auth-token': localStorage.getItem('token'),
+      'x-auth-token': localStorage.getItem('token') || '',
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache'
     },
@@ -313,42 +255,21 @@ export function PDFViewer() {
     maxImageSize: 1024 * 1024 * 10
   }), []);
 
-  // Update the Document component
-  const PDFDocument = useMemo(() => (
+  // Update the PDF document component
+  const PDFDocument = useMemo(() => {
+    return (
     <Document
       file={fileProps}
       onLoadSuccess={onDocumentLoadSuccess}
-      onLoadError={(error) => {
-        console.error('Error loading PDF:', error);
-        onDocumentLoadError(error);
-      }}
+        onLoadError={onDocumentLoadError}
       loading={
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          minHeight: '200px'
-        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <CircularProgress />
         </Box>
       }
       error={
-        <Box sx={{ 
-          p: 3, 
-          textAlign: 'center',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 2
-        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <Typography color="error">Failed to load PDF</Typography>
-          <Button 
-            variant="contained" 
-            onClick={fetchPdfAndComments}
-            size="small"
-          >
-            Retry
-          </Button>
         </Box>
       }
       options={pdfOptions}
@@ -356,25 +277,27 @@ export function PDFViewer() {
       <Page 
         pageNumber={pageNumber} 
         scale={scale}
+          rotate={rotation}
         renderTextLayer={true}
         renderAnnotationLayer={true}
-        width={Math.min(window.innerWidth * 0.9, 800)}
+          onRenderSuccess={() => {
+            setIsLoadingPage(false);
+            setIsRendering(false);
+          }}
+          onRenderError={(error) => {
+            console.error('Error rendering page:', error);
+            setIsLoadingPage(false);
+            setIsRendering(false);
+          }}
         loading={
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-            <CircularProgress size={24} />
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <CircularProgress />
           </Box>
         }
-        error={
-          <Box sx={{ p: 2, textAlign: 'center' }}>
-            <Typography color="error">Failed to load page</Typography>
-          </Box>
-        }
-        onLoadError={(error) => {
-          console.error('Error loading page:', error);
-        }}
       />
     </Document>
-  ), [fileProps, pageNumber, scale, pdfOptions, fetchPdfAndComments]);
+    );
+  }, [fileProps, pageNumber, scale, rotation, onDocumentLoadSuccess, onDocumentLoadError, pdfOptions]);
 
   useEffect(() => {
     // Check if this is a shared PDF access
@@ -806,7 +729,6 @@ export function PDFViewer() {
     const hasReplies = Array.isArray(comment.replies) && comment.replies.length > 0;
     const isExpanded = expandedReplies[comment._id];
     
-    // Get user information with proper fallback
     const userName = comment.user?.name || 'Anonymous';
     const userInitial = userName.charAt(0).toUpperCase();
     const commentContent = comment.content || '';
@@ -815,14 +737,14 @@ export function PDFViewer() {
       <Box 
         key={comment._id} 
         sx={{ 
-          mb: 2,
+          mb: 1.5,
           '&:last-child': { mb: 0 }
         }}
       >
         <Paper 
           elevation={0} 
           sx={{ 
-            p: 2,
+            p: 1.5,
             backgroundColor: 'transparent',
             borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
             '&:hover': {
@@ -830,14 +752,13 @@ export function PDFViewer() {
             }
           }}
         >
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
             <Avatar 
               sx={{ 
-                width: 32, 
-                height: 32,
+                width: 28, 
+                height: 28,
                 bgcolor: 'primary.main',
-                fontSize: '0.875rem',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                fontSize: '0.875rem'
               }}
             >
               {userInitial}
@@ -848,7 +769,8 @@ export function PDFViewer() {
                   variant="subtitle2" 
                   sx={{ 
                     fontWeight: 600,
-                    color: 'text.primary'
+                    color: 'text.primary',
+                    fontSize: '0.875rem'
                   }}
                 >
                   {userName}
@@ -869,8 +791,9 @@ export function PDFViewer() {
                   mb: 1,
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
-                  lineHeight: 1.5,
-                  color: 'text.primary'
+                  lineHeight: 1.4,
+                  color: 'text.primary',
+                  fontSize: '0.875rem'
                 }}
               >
                 {commentContent}
@@ -882,9 +805,10 @@ export function PDFViewer() {
                   sx={{ 
                     textTransform: 'none',
                     color: 'primary.main',
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                    }
+                    fontSize: '0.75rem',
+                    minWidth: 'auto',
+                    px: 1,
+                    py: 0.5
                   }}
                 >
                   Reply
@@ -896,9 +820,10 @@ export function PDFViewer() {
                     sx={{ 
                       textTransform: 'none',
                       color: 'text.secondary',
-                      '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                      }
+                      fontSize: '0.75rem',
+                      minWidth: 'auto',
+                      px: 1,
+                      py: 0.5
                     }}
                   >
                     {isExpanded ? 'Hide Replies' : `Show Replies (${comment.replies.length})`}
@@ -911,7 +836,7 @@ export function PDFViewer() {
 
         {/* Replies */}
         {hasReplies && isExpanded && (
-          <Box sx={{ ml: 4, mt: 1 }}>
+          <Box sx={{ ml: 3, mt: 1 }}>
             {comment.replies.map((reply) => {
               const replyUserName = reply.user?.name || 'Anonymous';
               const replyUserInitial = replyUserName.charAt(0).toUpperCase();
@@ -927,7 +852,7 @@ export function PDFViewer() {
                   <Paper 
                     elevation={0} 
                     sx={{ 
-                      p: 2,
+                      p: 1.5,
                       backgroundColor: 'transparent',
                       borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
                       '&:hover': {
@@ -935,7 +860,7 @@ export function PDFViewer() {
                       }
                     }}
                   >
-                    <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 1.5 }}>
                       <Avatar 
                         sx={{ 
                           width: 24, 
@@ -953,7 +878,7 @@ export function PDFViewer() {
                             sx={{ 
                               fontWeight: 600,
                               color: 'text.primary',
-                              fontSize: '0.875rem'
+                              fontSize: '0.75rem'
                             }}
                           >
                             {replyUserName}
@@ -962,7 +887,7 @@ export function PDFViewer() {
                             variant="caption" 
                             sx={{ 
                               color: 'text.secondary',
-                              fontSize: '0.75rem'
+                              fontSize: '0.7rem'
                             }}
                           >
                             {reply.createdAt ? getTimeAgo(reply.createdAt) : 'Unknown time'}
@@ -973,9 +898,9 @@ export function PDFViewer() {
                           sx={{ 
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
-                            lineHeight: 1.5,
+                            lineHeight: 1.4,
                             color: 'text.primary',
-                            fontSize: '0.875rem'
+                            fontSize: '0.75rem'
                           }}
                         >
                           {reply.content}
@@ -991,7 +916,7 @@ export function PDFViewer() {
 
         {/* Reply Input */}
         {replyingTo === comment._id && (
-          <Box sx={{ ml: 4, mt: 1 }}>
+          <Box sx={{ ml: 3, mt: 1 }}>
             <TextField
               fullWidth
               multiline
@@ -1010,6 +935,7 @@ export function PDFViewer() {
                   setReplyingTo(null);
                   setNewComment('');
                 }}
+                sx={{ fontSize: '0.75rem' }}
               >
                 Cancel
               </Button>
@@ -1018,6 +944,7 @@ export function PDFViewer() {
                 variant="contained"
                 onClick={() => handleReply(comment._id)}
                 disabled={!newComment.trim()}
+                sx={{ fontSize: '0.75rem' }}
               >
                 Reply
               </Button>
@@ -1221,7 +1148,10 @@ export function PDFViewer() {
       // Update the PDF state to reflect new download count
       setPdf(prevPdf => ({
         ...prevPdf,
-        downloads: (prevPdf.downloads || 0) + 1
+        downloads: [...(prevPdf.downloads || []), {
+          timestamp: new Date().toISOString(),
+          user: prevPdf.owner?._id
+        }]
       }));
 
       setSnackbar({
@@ -1238,6 +1168,38 @@ export function PDFViewer() {
       });
     }
   };
+
+  // Add useEffect to update view count
+  useEffect(() => {
+    const updateViewCount = async () => {
+      if (!pdf || !id) return;
+
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/pdf/${id}/view`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-token': token
+          }
+        });
+
+        if (response.ok) {
+          const updatedPdf = await response.json();
+          setPdf(prevPdf => ({
+            ...prevPdf,
+            views: updatedPdf.views
+          }));
+        }
+      } catch (error) {
+        console.error('Error updating view count:', error);
+      }
+    };
+
+    updateViewCount();
+  }, [id, pdf]);
 
   // Add cleanup effect
   useEffect(() => {
@@ -1265,7 +1227,12 @@ export function PDFViewer() {
     }
   }, [pdf]);
 
-  // Update the main render to handle authentication
+  // Update the PDF.js worker configuration
+  useEffect(() => {
+    pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+  }, []);
+
+  // Update the main render to handle loading state
   if (loading) {
     return (
       <Box sx={{ 
@@ -1349,40 +1316,140 @@ export function PDFViewer() {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <AppBar position="fixed" color="default" elevation={1}>
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column',
+      height: '100vh',
+      width: '100%',
+      overflow: 'hidden',
+      bgcolor: 'background.default'
+    }}>
+      {/* Toolbar */}
+      <AppBar position="static" color="default" elevation={1} sx={{ 
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper'
+      }}>
         <Toolbar sx={{ 
-          flexDirection: { xs: 'column', sm: 'row' },
-          gap: { xs: 1, sm: 0 },
-          py: { xs: 1, sm: 0 },
-          justifyContent: 'center'
+          display: 'flex',
+          justifyContent: 'space-between',
+          px: { xs: 1, sm: 2 }
         }}>
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={() => navigate(-1)}
-            sx={{ mr: { xs: 0, sm: 2 } }}
-          >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <IconButton onClick={() => navigate(-1)} size="small">
             <ArrowBackIcon />
           </IconButton>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              flexGrow: 1,
-              textAlign: 'center',
-              fontSize: { xs: '1rem', sm: '1.25rem' }
-            }}
-          >
+            <Typography variant="h6" sx={{ 
+              fontSize: { xs: '1rem', sm: '1.25rem' },
+              fontWeight: 600,
+              color: 'text.primary'
+            }}>
             {pdf?.name || 'PDF Viewer'}
           </Typography>
-          <Stack 
-            direction="row" 
-            spacing={1}
+          </Box>
+          
+          {/* Stats */}
+          <Box sx={{ 
+            display: { xs: 'none', sm: 'flex' }, 
+            alignItems: 'center', 
+            gap: 2,
+            mr: 2
+          }}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 0.5,
+              color: 'text.secondary'
+            }}>
+              <VisibilityIcon fontSize="small" />
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {pdf?.views?.length || 0} views
+              </Typography>
+            </Box>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 0.5,
+              color: 'text.secondary'
+            }}>
+              <DownloadIcon fontSize="small" />
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {pdf?.downloads?.length || 0} downloads
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: { xs: 0.5, sm: 1 } }}>
+            <Tooltip title="Fullscreen">
+              <IconButton onClick={handleFullscreen} size="small">
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Download">
+              <IconButton onClick={handleDownload} size="small">
+                <DownloadIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Share">
+              <IconButton onClick={() => setShowShareDialog(true)} size="small">
+                <ShareIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Comments">
+              <IconButton onClick={() => setShowComments(true)} size="small">
+                <Badge 
+                  badgeContent={calculateTotalComments(pdf?.comments || [])} 
+                  color="primary"
             sx={{ 
-              width: { xs: '100%', sm: 'auto' },
-              justifyContent: 'center'
-            }}
-          >
+                    '& .MuiBadge-badge': {
+                      fontSize: '0.75rem',
+                      height: '20px',
+                      minWidth: '20px',
+                      borderRadius: '10px'
+                    }
+                  }}
+                >
+                  <CommentIcon />
+                </Badge>
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      {/* Main content */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexGrow: 1,
+        overflow: 'hidden',
+        flexDirection: { xs: 'column', md: 'row' },
+        position: 'relative'
+      }}>
+        {/* PDF viewer */}
+        <Box sx={{ 
+          flexGrow: 1,
+          overflow: 'auto',
+          p: { xs: 1, sm: 2 },
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+          bgcolor: 'background.paper',
+          width: { xs: '100%', md: 'auto' },
+          position: 'relative'
+        }}>
+          {/* PDF Controls */}
+          <Box sx={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            display: 'flex',
+            gap: 1,
+            bgcolor: 'background.paper',
+            borderRadius: 1,
+            p: 0.5,
+            boxShadow: 1,
+            zIndex: 1
+          }}>
             <Tooltip title="Zoom In">
               <IconButton onClick={() => handleZoom('in')} size="small">
                 <ZoomInIcon />
@@ -1398,153 +1465,127 @@ export function PDFViewer() {
                 <RotateRightIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}>
-              <IconButton onClick={handleFullscreen} size="small">
-                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-              </IconButton>
-            </Tooltip>
-            <Button
-              startIcon={<DownloadIcon />}
-              onClick={handleDownload}
-              size="small"
-            >
-              Download
-            </Button>
-            <Button
-              startIcon={<ShareIcon />}
-              onClick={() => setOpenShareDialog(true)}
-              size="small"
-            >
-              Share
-            </Button>
-            <Button
-              startIcon={<CommentIcon />}
-              onClick={() => setShowShareDialog(true)}
-              size="small"
-            >
-              Comments ({pdf?.totalComments || 0})
-            </Button>
-          </Stack>
-        </Toolbar>
-      </AppBar>
+          </Box>
 
+          {isLoadingPage ? (
       <Box sx={{ 
-        mt: { xs: 7, sm: 8 }, 
-        p: { xs: 1, sm: 2, md: 3 }, 
-        flexGrow: 1, 
         display: 'flex',
-        flexDirection: { xs: 'column', lg: 'row' },
+              justifyContent: 'center', 
         alignItems: 'center',
+              height: '100%',
+              width: '100%'
+            }}>
+              <CircularProgress />
+            </Box>
+          ) : error ? (
+            <Box sx={{ 
+              display: 'flex', 
         justifyContent: 'center',
-        gap: 3,
+              alignItems: 'center', 
+              height: '100%',
         width: '100%'
       }}>
-        {/* PDF Viewer Section */}
+              <Typography color="error">{error}</Typography>
+            </Box>
+          ) : !pdf ? (
         <Box sx={{ 
-          flex: { lg: '1 1 60%' },
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%',
+              width: '100%'
+            }}>
+              <Typography>PDF not found</Typography>
+            </Box>
+          ) : (
+            <Box sx={{ 
           width: '100%',
+              maxWidth: { xs: '100%', sm: '500px', md: '600px', lg: '800px' },
+              minHeight: '100%',
           display: 'flex', 
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center'
+              gap: 2,
+              p: { xs: 1, sm: 2 }
         }}>
-          <Paper sx={{ 
-            p: { xs: 1, sm: 2 }, 
-            mb: 2, 
+              <Box sx={{
             width: '100%', 
-            maxWidth: { xs: '100%', sm: 600, md: 800 }
-          }}>
-            <Stack 
-              direction="row" 
-              spacing={2} 
-              justifyContent="center" 
-              alignItems="center"
-              sx={{ flexWrap: 'wrap', gap: 1 }}
-            >
-              <Button
+                bgcolor: 'background.paper',
+                borderRadius: 1,
+                boxShadow: 1,
+                overflow: 'hidden'
+              }}>
+                {PDFDocument}
+              </Box>
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                gap: 2,
+                width: '100%',
+                bgcolor: 'background.paper',
+                borderRadius: 1,
+                p: 1,
+                boxShadow: 1
+              }}>
+                <IconButton 
                 onClick={() => changePage(-1)}
                 disabled={pageNumber <= 1}
                 size="small"
               >
-                Previous
-              </Button>
-              <Typography variant="body2" sx={{ minWidth: '100px', textAlign: 'center' }}>
-                Page {pageNumber} of {numPages || '--'}
+                  <ChevronLeftIcon />
+                </IconButton>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Page {pageNumber} of {numPages}
               </Typography>
-              <Button
+                <IconButton 
                 onClick={() => changePage(1)}
                 disabled={pageNumber >= numPages}
                 size="small"
               >
-                Next
-              </Button>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Button onClick={zoomOut} size="small">-</Button>
-                <Typography variant="body2">{Math.round(scale * 100)}%</Typography>
-                <Button onClick={zoomIn} size="small">+</Button>
-              </Stack>
-            </Stack>
-          </Paper>
-
-          <Box sx={{ 
-            width: '100%', 
-            maxWidth: { xs: '100%', sm: 600, md: 800 },
-            overflow: 'auto',
-            bgcolor: 'background.paper',
-            borderRadius: 1,
-            boxShadow: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            '& .react-pdf__Document': {
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center'
-            },
-            '& .react-pdf__Page': {
-              maxWidth: '100%',
-              height: 'auto !important',
-              '& canvas': {
-                maxWidth: '100%',
-                height: 'auto !important'
-              }
-            }
-          }}>
-            {PDFDocument}
-          </Box>
+                  <ChevronRightIcon />
+                </IconButton>
+              </Box>
+            </Box>
+          )}
         </Box>
 
-        {/* Comments Section */}
-        <Paper sx={{ 
-          flex: { lg: '1 1 40%' },
-          width: '100%',
-          maxWidth: { xs: '100%', sm: 600, md: 800, lg: '100%' },
-          height: { lg: 'calc(100vh - 120px)' },
-          display: 'flex',
-          flexDirection: 'column',
-          p: { xs: 2, sm: 3 }
+        {/* Comments panel */}
+          <Box sx={{ 
+          width: { xs: '100%', md: '500px', lg: '600px' },
+          borderLeft: { xs: 0, md: '1px solid' },
+          borderTop: { xs: '1px solid', md: 0 },
+          borderColor: 'divider',
+          overflow: 'hidden',
+            bgcolor: 'background.paper',
+              display: 'flex',
+              flexDirection: 'column',
+          height: { xs: '50vh', md: 'auto' }
         }}>
-          <Typography variant="h6" gutterBottom>
-            Comments ({calculateTotalComments(pdf?.comments)})
+          <Box sx={{ 
+            p: 2, 
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper'
+          }}>
+            <Typography variant="h6" gutterBottom sx={{ 
+              fontSize: { xs: '1rem', sm: '1.25rem' },
+              fontWeight: 600
+            }}>
+              Comments ({calculateTotalComments(pdf?.comments || [])})
           </Typography>
-          
-          {/* Add Comment Form */}
-          <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: 2 }}>
             <TextField
               fullWidth
               multiline
               rows={3}
+                placeholder="Add a comment..."
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add a comment..."
-              variant="outlined"
-              size="small"
               sx={{ 
                 mb: 1,
                 '& .MuiOutlinedInput-root': {
-                  backgroundColor: 'background.paper',
-                  '&:hover': {
-                    '& > fieldset': { borderColor: 'primary.main' }
-                  }
+                    borderRadius: 1
                 }
               }}
             />
@@ -1554,60 +1595,53 @@ export function PDFViewer() {
               disabled={!newComment.trim()}
               fullWidth
               sx={{ 
+                  borderRadius: 1,
                 textTransform: 'none',
-                boxShadow: 'none',
-                '&:hover': {
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                }
+                  fontWeight: 500
               }}
             >
-              Post Comment
+                Add Comment
             </Button>
           </Box>
-
-          {/* Comments List */}
+          </Box>
           <Box sx={{ 
             flex: 1,
-            overflowY: 'auto',
+            overflow: 'auto', 
+            p: 2,
             '&::-webkit-scrollbar': {
               width: '8px',
             },
             '&::-webkit-scrollbar-track': {
-              background: 'rgba(0, 0, 0, 0.05)',
-              borderRadius: '4px',
+              background: 'transparent',
             },
             '&::-webkit-scrollbar-thumb': {
-              background: 'rgba(0, 0, 0, 0.2)',
+              background: 'rgba(0,0,0,0.1)',
               borderRadius: '4px',
-              '&:hover': {
-                background: 'rgba(0, 0, 0, 0.3)',
-              },
             },
+            '&::-webkit-scrollbar-thumb:hover': {
+              background: 'rgba(0,0,0,0.2)',
+            }
           }}>
-            {pdf?.comments?.length > 0 ? (
-              pdf.comments.map((comment) => renderComment(comment))
-            ) : (
-              <Typography 
-                color="text.secondary" 
-                align="center"
-                sx={{ py: 4 }}
-              >
-                No comments yet
-              </Typography>
-            )}
+            {pdf?.comments?.map((comment) => renderComment(comment))}
           </Box>
-        </Paper>
+        </Box>
       </Box>
 
+      {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert
           onClose={() => setSnackbar({ ...snackbar, open: false })}
           severity={snackbar.severity}
-          sx={{ width: '100%' }}
+          sx={{ 
+            width: '100%',
+            borderRadius: 1,
+            boxShadow: 2
+          }}
         >
           {snackbar.message}
         </Alert>
@@ -1827,216 +1861,85 @@ export function PDFViewer() {
 
       {renderPasswordDialog()}
 
-      <Dialog open={showShareDialog} onClose={() => setShowShareDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ShareIcon />
-            Share PDF
-          </Box>
+      {/* Comments Section */}
+      <Dialog
+        open={showComments}
+        onClose={() => setShowComments(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            height: { xs: '100%', sm: '80vh' },
+            maxHeight: { xs: '100%', sm: '80vh' },
+            width: { xs: '100%', sm: '400px' },
+            maxWidth: { xs: '100%', sm: '400px' },
+            position: { xs: 'fixed', sm: 'relative' },
+            top: { xs: 0, sm: 'auto' },
+            right: { xs: 0, sm: 'auto' },
+            bottom: { xs: 0, sm: 'auto' },
+            left: { xs: 0, sm: 'auto' },
+            margin: { xs: 0, sm: 'auto' },
+            borderRadius: { xs: 0, sm: 1 }
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          p: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid',
+          borderColor: 'divider'
+        }}>
+          <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+            Comments ({calculateTotalComments(pdf?.comments || [])})
+          </Typography>
+          <IconButton onClick={() => setShowComments(false)} size="small">
+            <CloseIcon />
+          </IconButton>
         </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Choose Sharing Type
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-              <Button
-                variant={shareSettings.shareType === 'public' ? 'contained' : 'outlined'}
-                onClick={() => {
-                  setShareSettings(prev => ({ ...prev, shareType: 'public', password: '' }));
-                  setShareLink(''); // Clear existing link when changing type
-                }}
-                startIcon={<PublicIcon />}
-                sx={{ flex: 1 }}
-              >
-                Public Link
-              </Button>
-              <Button
-                variant={shareSettings.shareType === 'password' ? 'contained' : 'outlined'}
-                onClick={() => {
-                  setShareSettings(prev => ({ ...prev, shareType: 'password' }));
-                  setShareLink(''); // Clear existing link when changing type
-                }}
-                startIcon={<LockIcon />}
-                sx={{ flex: 1 }}
-              >
-                Password Protected
-              </Button>
-            </Box>
-
-            {shareSettings.shareType === 'public' && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Anyone with the link can access this PDF
-              </Alert>
-            )}
-
-            {shareSettings.shareType === 'password' && (
-              <>
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                  This link will require a password to access
-                </Alert>
-                <TextField
-                  fullWidth
-                  label="Password"
-                  type="password"
-                  value={shareSettings.password}
-                  onChange={(e) => {
-                    setShareSettings(prev => ({ ...prev, password: e.target.value }));
-                    setShareLink(''); // Clear existing link when changing password
-                  }}
-                  sx={{ mb: 2 }}
-                  helperText="Set a password to protect the PDF"
-                  required
-                  error={!shareSettings.password}
-                />
-              </>
-            )}
-
-            <TextField
-              select
-              fullWidth
-              label="Link Expiry"
-              value={shareSettings.linkExpiry}
-              onChange={(e) => setShareSettings(prev => ({ ...prev, linkExpiry: e.target.value }))}
-              sx={{ mb: 2 }}
-              helperText="Choose how long the share link should be valid"
-            >
-              <MenuItem value="1d">1 Day</MenuItem>
-              <MenuItem value="7d">7 Days</MenuItem>
-              <MenuItem value="30d">30 Days</MenuItem>
-              <MenuItem value="never">Never</MenuItem>
-            </TextField>
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={shareSettings.allowDownload}
-                  onChange={(e) => setShareSettings(prev => ({ ...prev, allowDownload: e.target.checked }))}
-                />
-              }
-              label="Allow Download"
-              sx={{ mb: 1 }}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={shareSettings.allowComments}
-                  onChange={(e) => setShareSettings(prev => ({ ...prev, allowComments: e.target.checked }))}
-                />
-              }
-              label="Allow Comments"
-              sx={{ mb: 1 }}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={shareSettings.notifyOnAccess}
-                  onChange={(e) => setShareSettings(prev => ({ ...prev, notifyOnAccess: e.target.checked }))}
-                />
-              }
-              label="Notify me when someone accesses the PDF"
-              sx={{ mb: 1 }}
-            />
+        <DialogContent sx={{ 
+          p: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%'
+        }}>
+          <Box sx={{ 
+            flex: 1,
+            overflow: 'auto',
+            p: 2
+          }}>
+            {pdf?.comments?.map(renderComment)}
           </Box>
-
-          {shareLink && (
-            <Box sx={{ mt: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                {shareSettings.shareType === 'password' ? 'Password Protected Share Link' : 'Public Share Link'}
-              </Typography>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 1,
-                bgcolor: 'background.paper',
-                p: 1,
-                borderRadius: 1,
-                border: '1px solid',
-                borderColor: 'divider'
-              }}>
-                <Typography
-                  sx={{
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  {shareLink}
-                </Typography>
-                <IconButton 
-                  onClick={copyShareLink} 
-                  size="small"
-                  sx={{ 
-                    color: 'primary.main',
-                    '&:hover': {
-                      bgcolor: 'primary.light',
-                      color: 'primary.contrastText'
-                    }
-                  }}
-                >
-                  <CopyIcon />
-                </IconButton>
-              </Box>
-              <Box sx={{ mt: 1 }}>
-                {shareSettings.shareType === 'password' && (
-                  <Chip
-                    icon={<LockIcon />}
-                    label="Password Protected"
-                    size="small"
-                    color="warning"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.shareType === 'public' && (
-                  <Chip
-                    icon={<PublicIcon />}
-                    label="Public Access"
-                    size="small"
-                    color="success"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.linkExpiry !== 'never' && (
-                  <Chip
-                    icon={<AccessTimeIcon />}
-                    label={`Expires in ${shareSettings.linkExpiry}`}
-                    size="small"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.allowDownload && (
-                  <Chip
-                    icon={<DownloadIcon />}
-                    label="Download Allowed"
-                    size="small"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.allowComments && (
-                  <Chip
-                    icon={<CommentIcon />}
-                    label="Comments Allowed"
-                    size="small"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-              </Box>
+          <Box sx={{ 
+            p: 2,
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper'
+          }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={2}
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              variant="outlined"
+              size="small"
+              sx={{ mb: 1 }}
+            />
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                variant="contained"
+                onClick={handleCommentSubmit}
+                disabled={!newComment.trim()}
+                size="small"
+              >
+                Comment
+              </Button>
             </Box>
-          )}
+          </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowShareDialog(false)}>Cancel</Button>
-          <Button
-            onClick={handleShare}
-            variant="contained"
-            disabled={shareSettings.shareType === 'password' && !shareSettings.password}
-            startIcon={<ShareIcon />}
-          >
-            Generate {shareSettings.shareType === 'password' ? 'Protected' : 'Public'} Link
-          </Button>
-        </DialogActions>
       </Dialog>
     </Box>
   );

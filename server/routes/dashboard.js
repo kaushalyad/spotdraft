@@ -30,8 +30,24 @@ router.get('/', auth, async (req, res) => {
         $group: {
           _id: null,
           totalPdfs: { $sum: 1 },
-          totalViews: { $sum: { $ifNull: ['$views', 0] } },
-          totalDownloads: { $sum: { $ifNull: ['$downloads', 0] } },
+          totalViews: { 
+            $sum: { 
+              $cond: [
+                { $isArray: "$views" },
+                { $size: "$views" },
+                0
+              ]
+            }
+          },
+          totalDownloads: { 
+            $sum: { 
+              $cond: [
+                { $isArray: "$downloads" },
+                { $size: "$downloads" },
+                0
+              ]
+            }
+          },
           totalComments: {
             $sum: {
               $add: [

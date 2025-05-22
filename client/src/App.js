@@ -7,7 +7,8 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
-import PDFViewer from './components/PDFViewer';
+import { PDFViewer } from './components/PDFViewer';
+import { SettingsProvider } from './contexts/SettingsContext';
 
 const App = () => {
   // Get theme from localStorage or default to light
@@ -141,19 +142,22 @@ const App = () => {
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
-          <Route path="/pdf/:id" element={<PDFViewer />} />
-          <Route path="/" element={<Dashboard onThemeToggle={toggleTheme} />} />
-        </Routes>
-      </Router>
-    </ThemeProvider>
+    <SettingsProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
+            <Route path="/pdf/:id" element={<PDFViewer />} />
+            <Route path="/shared/:token" element={<PDFViewer />} />
+            <Route path="/" element={<Dashboard />} />
+          </Routes>
+        </Router>
+      </ThemeProvider>
+    </SettingsProvider>
   );
 };
 
