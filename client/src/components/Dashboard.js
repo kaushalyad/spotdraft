@@ -84,6 +84,7 @@ import { format } from 'date-fns';
 import config from '../config';
 import Analytics from './Analytics';
 import Settings from './Settings';
+import { useSettings } from '../contexts/SettingsContext';
 
 // Add API URL constant
 const API_URL = config.API_URL;
@@ -203,8 +204,10 @@ const calculateTotalComments = (comments) => {
 
 const Dashboard = memo(() => {
   const theme = useTheme();
+  const { t, settings } = useSettings();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
+  const [forceUpdate, setForceUpdate] = useState(0);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalPdfs: 0,
@@ -247,18 +250,11 @@ const Dashboard = memo(() => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [error, setError] = useState(null);
-  const [darkMode, setDarkMode] = useState(() => {
-    const storedMode = localStorage.getItem('darkMode');
-    return storedMode ? JSON.parse(storedMode) : false;
-  });
 
-  // Add theme toggle handler
-  const handleThemeToggle = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    localStorage.setItem('darkMode', JSON.stringify(newMode));
-    // You can add additional theme switching logic here if needed
-  };
+  // Add language change effect
+  useEffect(() => {
+    setForceUpdate(prev => prev + 1);
+  }, [settings.language]);
 
   // Enhanced search function
   const handleSearch = async (query) => {
@@ -938,7 +934,7 @@ const Dashboard = memo(() => {
   }, [searchResults]);
 
   const drawer = (
-    <Box sx={{ overflow: 'auto' }}>
+    <Box sx={{ overflow: 'auto' }} key={forceUpdate}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
         <PdfIcon sx={{ fontSize: 32, color: 'primary.main' }} />
         <Typography variant="h6" color="primary.main" sx={{ fontWeight: 600 }}>
@@ -951,31 +947,31 @@ const Dashboard = memo(() => {
           <ListItemIcon>
             <DashboardIcon color={selectedTab === 0 ? 'primary' : 'inherit'} />
           </ListItemIcon>
-          <ListItemText primary="Dashboard" />
+          <ListItemText primary={t('dashboard')} />
         </ListItem>
         <ListItem button selected={selectedTab === 1} onClick={() => setSelectedTab(1)}>
           <ListItemIcon>
             <DescriptionIcon color={selectedTab === 1 ? 'primary' : 'inherit'} />
           </ListItemIcon>
-          <ListItemText primary="My PDFs" />
+          <ListItemText primary={t('myPdfs')} />
         </ListItem>
         <ListItem button selected={selectedTab === 2} onClick={() => setSelectedTab(2)}>
           <ListItemIcon>
             <FolderIcon color={selectedTab === 2 ? 'primary' : 'inherit'} />
           </ListItemIcon>
-          <ListItemText primary="Shared with me" />
+          <ListItemText primary={t('sharedWithMe')} />
         </ListItem>
-        <ListItem button selected={selectedTab === 3} onClick={() => setSelectedTab(3)}>
+        <ListItem button selected={selectedTab === 3} onClick={() => setSelectedTab(3)} key={`analytics-${settings.language}`}>
           <ListItemIcon>
             <BarChartIcon color={selectedTab === 3 ? 'primary' : 'inherit'} />
           </ListItemIcon>
-          <ListItemText primary="Analytics" />
+          <ListItemText primary={t('analytics')} />
         </ListItem>
         <ListItem button selected={selectedTab === 4} onClick={() => setSelectedTab(4)}>
           <ListItemIcon>
             <SettingsIcon color={selectedTab === 4 ? 'primary' : 'inherit'} />
           </ListItemIcon>
-          <ListItemText primary="Settings" />
+          <ListItemText primary={t('settings')} />
         </ListItem>
       </List>
     </Box>
@@ -1257,23 +1253,30 @@ const Dashboard = memo(() => {
         {/* Main Content Area */}
         <Box sx={{ mt: 8, mb: 4 }}>
           {/* Welcome Section */}
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-              Welcome back, {user?.name || 'User'}!
+          <Box className="welcome-message" sx={{ 
+            mb: 4,
+            bgcolor: theme => theme.palette.mode === 'dark' ? 'primary.dark' : 'background.paper',
+            p: 3,
+            borderRadius: 2,
+            boxShadow: 1,
+            color: theme => theme.palette.mode === 'dark' ? 'common.white' : 'text.primary'
+          }}>
+            <Typography variant="h4" gutterBottom sx={{ color: 'inherit' }}>
+              {t('welcome')}, {user?.name || 'User'}!
             </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Here's an overview of your PDFs and activity.
+            <Typography variant="body1" sx={{ color: 'inherit' }}>
+              {t('overview')}
             </Typography>
           </Box>
 
           {/* Tabs */}
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
             <Tabs value={selectedTab} onChange={handleTabChange}>
-              <Tab label="Overview" />
-              <Tab label="My PDFs" />
-              <Tab label="Shared with me" />
-              <Tab label="Analytics" />
-              <Tab label="Settings" />
+              <Tab label={t('dashboard')} />
+              <Tab label={t('myPdfs')} />
+              <Tab label={t('sharedWithMe')} />
+              <Tab label={t('analytics')} />
+              <Tab label={t('settings')} />
             </Tabs>
           </Box>
 
@@ -1308,7 +1311,7 @@ const Dashboard = memo(() => {
                             {stats.totalPdfs || 0}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Total PDFs
+                            {t('totalPdfs')}
                           </Typography>
                         </Box>
                       </Stack>
@@ -1341,7 +1344,7 @@ const Dashboard = memo(() => {
                             {stats.totalComments || 0}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Total Comments
+                            {t('totalComments')}
                           </Typography>
                         </Box>
                       </Stack>
@@ -1374,7 +1377,7 @@ const Dashboard = memo(() => {
                             {stats.totalViews || 0}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Total Views
+                            {t('totalViews')}
                           </Typography>
                         </Box>
                       </Stack>
@@ -1407,7 +1410,7 @@ const Dashboard = memo(() => {
                             {stats.totalDownloads || 0}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Total Downloads
+                            {t('totalDownloads')}
                           </Typography>
                         </Box>
                       </Stack>
@@ -1427,7 +1430,7 @@ const Dashboard = memo(() => {
                       mb: 2
                     }}>
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                        Recent PDFs
+                        {t('recentPdfs')}
                       </Typography>
                       <Stack direction="row" spacing={1}>
                         <Tooltip title="Sort">
@@ -1544,7 +1547,7 @@ const Dashboard = memo(() => {
                 <Grid item xs={12} md={4}>
                   <Paper sx={{ p: 2, borderRadius: 2 }}>
                     <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                      Recent Activity
+                      {t('recentActivity')}
                     </Typography>
                     <List>
                       {recentActivity.length > 0 ? (
@@ -1602,7 +1605,7 @@ const Dashboard = memo(() => {
                 mb: 3
               }}>
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  My PDFs
+                  {t('myPdfs')}
                 </Typography>
                 <Stack direction="row" spacing={1}>
                   <Tooltip title="Sort">
@@ -1735,13 +1738,13 @@ const Dashboard = memo(() => {
 
           {selectedTab === 2 && (
             <Paper sx={{ p: 2, borderRadius: 2 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Shared with me</Typography>
+              <Typography variant="h6" sx={{ mb: 2 }}>{t('sharedWithMe')}</Typography>
               {/* Shared PDFs content */}
             </Paper>
           )}
 
           {selectedTab === 3 && (
-            <Paper sx={{ p: 2, borderRadius: 2 }}>
+            <Paper sx={{ p: 2, borderRadius: 2 }} key={`analytics-${settings.language}`}>
               <Analytics />
             </Paper>
           )}
@@ -1749,11 +1752,11 @@ const Dashboard = memo(() => {
           {selectedTab === 4 && (
             <Paper sx={{ p: 2, borderRadius: 2 }}>
               {user ? (
-                <Settings onThemeToggle={handleThemeToggle} user={user} />
+                <Settings user={user} />
               ) : (
                 <Box sx={{ p: 3, textAlign: 'center' }}>
                   <Typography color="error">
-                    Please log in to access settings
+                    {t('pleaseLogin')}
                   </Typography>
                 </Box>
               )}
@@ -1782,7 +1785,7 @@ const Dashboard = memo(() => {
           maxWidth="sm"
           fullWidth
         >
-          <DialogTitle>Upload PDF</DialogTitle>
+          <DialogTitle>{t('uploadPDF')}</DialogTitle>
           <DialogContent>
             <Box sx={{ p: 2 }}>
               <input
@@ -1800,12 +1803,12 @@ const Dashboard = memo(() => {
                   fullWidth
                   sx={{ mb: 2 }}
                 >
-                  {selectedFile ? selectedFile.name : 'Choose PDF'}
+                  {selectedFile ? selectedFile.name : t('choosePDF')}
                 </Button>
               </label>
               <TextField
                 fullWidth
-                label="PDF Name"
+                label={t('pdfName')}
                 variant="outlined"
                 value={pdfName}
                 onChange={(e) => setPdfName(e.target.value)}
@@ -1813,7 +1816,7 @@ const Dashboard = memo(() => {
               />
               <TextField
                 fullWidth
-                label="Description"
+                label={t('description')}
                 variant="outlined"
                 multiline
                 rows={3}
@@ -1823,14 +1826,14 @@ const Dashboard = memo(() => {
             </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setUploadDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => setUploadDialogOpen(false)}>{t('cancel')}</Button>
             <Button 
               variant="contained" 
               color="primary"
               onClick={handleUpload}
               disabled={!selectedFile || uploading}
             >
-              {uploading ? 'Uploading...' : 'Upload'}
+              {uploading ? t('uploading') : t('upload')}
             </Button>
           </DialogActions>
         </Dialog>
@@ -1871,7 +1874,7 @@ const Dashboard = memo(() => {
             <Stack spacing={3} sx={{ mt: 2 }}>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Account Information
+                  {t('accountInformation')}
                 </Typography>
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                   <Stack spacing={2}>
@@ -1886,7 +1889,7 @@ const Dashboard = memo(() => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <CalendarIcon color="action" />
                       <Typography>
-                        Joined {new Date(user.createdAt).toLocaleDateString()}
+                        {t('joined')} {new Date(user.createdAt).toLocaleDateString()}
                       </Typography>
                     </Box>
                   </Stack>
@@ -1894,13 +1897,13 @@ const Dashboard = memo(() => {
               </Box>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Account Statistics
+                  {t('accountStatistics')}
                 </Typography>
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                   <Grid container spacing={2}>
                     <Grid item xs={6}>
                       <Typography variant="body2" color="text.secondary">
-                        Total PDFs
+                        {t('totalPdfs')}
                       </Typography>
                       <Typography variant="h6">
                         {stats.totalPdfs}
@@ -1908,7 +1911,7 @@ const Dashboard = memo(() => {
                     </Grid>
                     <Grid item xs={6}>
                       <Typography variant="body2" color="text.secondary">
-                        Total Comments
+                        {t('totalComments')}
                       </Typography>
                       <Typography variant="h6">
                         {stats.totalComments}
@@ -1924,7 +1927,7 @@ const Dashboard = memo(() => {
               onClick={() => setOpenProfileDialog(false)}
               variant="outlined"
             >
-              Close
+              {t('close')}
             </Button>
           </DialogActions>
         </Dialog>
@@ -1947,11 +1950,11 @@ const Dashboard = memo(() => {
             gap: 1
           }}>
             <LogoutIcon />
-            Confirm Logout
+            {t('logoutConfirmationTitle')}
           </DialogTitle>
           <DialogContent sx={{ mt: 2 }}>
             <Typography>
-              Are you sure you want to logout?
+              {t('logoutConfirmationMessage')}
             </Typography>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
@@ -1959,7 +1962,7 @@ const Dashboard = memo(() => {
               onClick={() => setOpenLogoutDialog(false)}
               variant="outlined"
             >
-              Cancel
+              {t('cancel')}
             </Button>
             <Button 
               onClick={handleLogout} 
@@ -1967,7 +1970,7 @@ const Dashboard = memo(() => {
               variant="contained"
               startIcon={<LogoutIcon />}
             >
-              Logout
+              {t('logout')}
             </Button>
           </DialogActions>
         </Dialog>
@@ -1979,7 +1982,7 @@ const Dashboard = memo(() => {
           maxWidth="sm"
           fullWidth
         >
-          <DialogTitle>Share PDF</DialogTitle>
+          <DialogTitle>{t('sharePDF')}</DialogTitle>
           <DialogContent>
             <FormControlLabel
               control={
@@ -1988,13 +1991,13 @@ const Dashboard = memo(() => {
                   onChange={(e) => setIsPublic(e.target.checked)}
                 />
               }
-              label="Make public"
+              label={t('makePublic')}
               sx={{ mb: 2 }}
             />
             {!isPublic && (
               <TextField
                 fullWidth
-                label="Email"
+                label={t('email')}
                 type="email"
                 value={shareEmail}
                 onChange={(e) => setShareEmail(e.target.value)}
@@ -2003,7 +2006,7 @@ const Dashboard = memo(() => {
             )}
             {shareLink && (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2">Share Link:</Typography>
+                <Typography variant="subtitle2">{t('shareLink')}:</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Link href={shareLink} target="_blank" rel="noopener">
                     {shareLink}
@@ -2016,13 +2019,13 @@ const Dashboard = memo(() => {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setOpenShareDialog(false)}>Cancel</Button>
+            <Button onClick={() => setOpenShareDialog(false)}>{t('cancel')}</Button>
             <Button
               onClick={() => handleShare(selectedPdf._id)}
               variant="contained"
               disabled={!isPublic && !shareEmail}
             >
-              Share
+              {t('share')}
             </Button>
           </DialogActions>
         </Dialog>
@@ -2041,7 +2044,7 @@ const Dashboard = memo(() => {
           <DialogTitle>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="h6">
-                Comments
+                {t('comments')}
               </Typography>
               {selectedPdfForComment && (
                 <Typography variant="subtitle1" color="text.secondary">
@@ -2057,7 +2060,7 @@ const Dashboard = memo(() => {
                 fullWidth
                 multiline
                 rows={3}
-                label="Add a comment"
+                label={t('addComment')}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 sx={{ mb: 1 }}
@@ -2068,7 +2071,7 @@ const Dashboard = memo(() => {
                 disabled={commenting || !commentText.trim()}
                 sx={{ float: 'right' }}
               >
-                {commenting ? 'Adding Comment...' : 'Add Comment'}
+                {commenting ? t('addingComment') : t('addComment')}
               </Button>
             </Box>
 
@@ -2100,7 +2103,7 @@ const Dashboard = memo(() => {
                         size="small"
                         onClick={() => setReplyTo(comment._id)}
                       >
-                        Reply
+                        {t('reply')}
                       </Button>
                     </Box>
                   </ListItem>
@@ -2137,7 +2140,7 @@ const Dashboard = memo(() => {
                         size="small"
                         multiline
                         rows={2}
-                        placeholder="Write a reply..."
+                        placeholder={t('writeReply')}
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
                         sx={{ mb: 1 }}
@@ -2150,7 +2153,7 @@ const Dashboard = memo(() => {
                             setReplyText('');
                           }}
                         >
-                          Cancel
+                          {t('cancel')}
                         </Button>
                         <Button
                           size="small"
@@ -2158,7 +2161,7 @@ const Dashboard = memo(() => {
                           onClick={() => handleReply(comment._id)}
                           disabled={commenting || !replyText.trim()}
                         >
-                          {commenting ? 'Adding Reply...' : 'Reply'}
+                          {commenting ? t('addingReply') : t('reply')}
                         </Button>
                       </Box>
                     </Box>
@@ -2173,9 +2176,7 @@ const Dashboard = memo(() => {
               setCommentDialogOpen(false);
               setReplyTo(null);
               setReplyText('');
-            }}>
-              Close
-            </Button>
+            }}>{t('close')}</Button>
           </DialogActions>
         </Dialog>
 

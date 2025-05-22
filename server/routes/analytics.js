@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const PDF = require('../models/PDF');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 
 // Get analytics data
 router.get('/', auth, async (req, res) => {
@@ -13,7 +14,8 @@ router.get('/', auth, async (req, res) => {
   });
 
   try {
-    const userId = req.user.id;
+    // Convert string ID to ObjectId
+    const userId = new mongoose.Types.ObjectId(req.user.id);
 
     // Get views and downloads for the last 7 days
     const sevenDaysAgo = new Date();
@@ -82,7 +84,7 @@ router.get('/', auth, async (req, res) => {
       }
     ]);
 
-    // Get top 5 PDFs by views with proper view and download counts
+    // Get top 5 PDFs by views
     const topPdfs = await PDF.aggregate([
       {
         $match: { owner: userId }
@@ -179,6 +181,14 @@ router.get('/', auth, async (req, res) => {
       }
     ]);
 
+    console.log('Analytics data fetched successfully:', {
+      viewsByDayCount: viewsByDay.length,
+      downloadsByDayCount: downloadsByDay.length,
+      topPdfsCount: topPdfs.length,
+      userActivityCount: userActivity.length,
+      totalStats: totalStats[0] || { totalViews: 0, totalDownloads: 0 }
+    });
+
     res.json({
       viewsByDay: viewsByDay.map(item => ({
         date: item._id,
@@ -199,7 +209,10 @@ router.get('/', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching analytics:', error);
-    res.status(500).json({ message: 'Error fetching analytics data' });
+    res.status(500).json({ 
+      message: 'Error fetching analytics data',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
