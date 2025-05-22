@@ -24,8 +24,13 @@ process.on('unhandledRejection', (err) => {
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true
+  origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
+  exposedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 app.use(express.json());
@@ -152,10 +157,20 @@ app.use((err, req, res, next) => {
   });
 });
 
+const startServer = (port) => {
+  try {
+    app.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
+  } catch (err) {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Port ${port} is busy, trying ${port + 1}`);
+      startServer(port + 1);
+    } else {
+      console.error('Server error:', err);
+    }
+  }
+};
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log('Environment:', process.env.NODE_ENV || 'development');
-  console.log('MongoDB URI:', process.env.MONGODB_URI);
-  console.log('Server start time:', new Date().toISOString());
-}); 
+startServer(PORT); 
