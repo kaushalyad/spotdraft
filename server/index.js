@@ -21,21 +21,24 @@ process.on('unhandledRejection', (err) => {
 app.use(cors({
   origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
   credentials: true,
-  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  exposedHeaders: ['Content-Disposition'],
+  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma', 'Origin', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  exposedHeaders: ['Content-Disposition', 'Content-Type'],
   preflightContinue: false,
-  optionsSuccessStatus: 204
+  optionsSuccessStatus: 204,
+  maxAge: 86400 // 24 hours
 }));
 
 // Handle preflight requests
 app.options('*', cors({
   origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
   credentials: true,
-  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma', 'Origin', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  exposedHeaders: ['Content-Disposition', 'Content-Type'],
   preflightContinue: false,
-  optionsSuccessStatus: 204
+  optionsSuccessStatus: 204,
+  maxAge: 86400 // 24 hours
 }));
 
 app.use(express.json());
