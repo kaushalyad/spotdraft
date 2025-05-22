@@ -42,39 +42,54 @@ router.post('/signup', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('Login attempt for email:', email);
-    
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ 
+        message: 'Please provide both email and password',
+        error: 'MISSING_CREDENTIALS'
+      });
+    }
+
+    // Find user
     const user = await User.findOne({ email });
     if (!user) {
-      console.log('User not found for email:', email);
-      return res.status(400).json({ message: 'User not found' });
+      return res.status(400).json({ 
+        message: 'Invalid credentials',
+        error: 'INVALID_CREDENTIALS'
+      });
     }
 
+    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.log('Invalid password for email:', email);
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ 
+        message: 'Invalid credentials',
+        error: 'INVALID_CREDENTIALS'
+      });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    console.log('Generated token for user:', user._id);
-    
-    // Send user data along with token
-    const userData = {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      createdAt: user.createdAt
-    };
-    
-    console.log('Sending response with user data:', userData);
+    // Generate token
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
     res.json({
       token,
-      user: userData
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email
+      }
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Error logging in', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error during login',
+      error: 'SERVER_ERROR'
+    });
   }
 });
 
