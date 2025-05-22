@@ -1,10 +1,12 @@
 import axios from 'axios';
+import config from '../config';
 
 const instance = axios.create({
-  baseURL: 'http://localhost:5000',
+  baseURL: config.API_URL,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true
 });
 
 // Add a request interceptor

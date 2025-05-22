@@ -8,7 +8,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -19,7 +19,7 @@ app.use(cors({
 
 // Handle preflight requests
 app.options('*', cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept', 'Cache-Control', 'Pragma'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -60,51 +60,21 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/spotdraft
 const authRoutes = require('./routes/auth');
 const pdfRoutes = require('./routes/pdf');
 const dashboardRoutes = require('./routes/dashboard');
-const userRoutes = require('./routes/user');
-const analyticsRoutes = require('./routes/analytics');
 
 // Register routes
 app.use('/auth', authRoutes);
 app.use('/pdf', pdfRoutes);
 app.use('/dashboard', dashboardRoutes);
-app.use('/user', userRoutes);
-app.use('/api/analytics', analyticsRoutes);
 
 // Test route
 app.get('/test', (req, res) => {
   res.json({ message: 'Server is running' });
 });
 
-// Set development mode
-process.env.NODE_ENV = 'development';
-
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error details:', {
-    message: err.message,
-    stack: err.stack,
-    name: err.name,
-    code: err.code,
-    path: req.path,
-    method: req.method,
-    body: req.body,
-    file: req.file,
-    headers: req.headers,
-    originalUrl: req.originalUrl,
-    errors: err.errors,
-    keyPattern: err.keyPattern,
-    keyValue: err.keyValue
-  });
-
-  // Always send detailed error information in development
-  res.status(500).json({
-    message: err.message,
-    error: err.message,
-    stack: err.stack,
-    name: err.name,
-    code: err.code,
-    details: err.errors || err.keyPattern || err.keyValue
-  });
+  console.error('Server error:', err);
+  res.status(500).json({ message: 'Server error', error: err.message });
 });
 
 // 404 handler - must be last

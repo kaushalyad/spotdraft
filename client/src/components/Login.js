@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
+import axiosInstance from '../utils/axios';
 import {
   Container,
   Paper,
@@ -108,14 +108,8 @@ function Login() {
 
     try {
       console.log('Sending login request with:', { email, password });
-      const response = await axios.post('http://localhost:5000/auth/login', 
-        { email, password },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          withCredentials: true
-        }
+      const response = await axiosInstance.post('/auth/login', 
+        { email, password }
       );
       
       console.log('Login response:', response.data);
