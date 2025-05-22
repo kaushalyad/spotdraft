@@ -1125,76 +1125,49 @@ router.delete('/:id/comments/:commentId', auth, async (req, res) => {
 // Get PDF file
 router.get('/:id/file', auth, async (req, res) => {
   try {
-    console.log('PDF file request received:', {
-      pdfId: req.params.id,
-      userId: req.user.id,
-      path: req.path,
-      method: req.method,
-      headers: req.headers
-    });
-
     const pdf = await PDF.findById(req.params.id);
     if (!pdf) {
-      console.log('PDF not found:', req.params.id);
       return res.status(404).json({ message: 'PDF not found' });
     }
 
-    // Check if user has access
-    const hasPermission = 
-      pdf.owner.toString() === req.user.id ||
-      pdf.sharedWith.some(share => share.user.toString() === req.user.id) ||
-      pdf.isPublic;
-
-    if (!hasPermission) {
-      console.log('User not authorized to access PDF:', {
-        userId: req.user.id,
-        ownerId: pdf.owner.toString(),
-        isPublic: pdf.isPublic
-      });
-      return res.status(403).json({ message: 'Not authorized to access this PDF' });
-    }
-
-    // Increment view count
-    await pdf.incrementViews();
-
-    // Construct absolute file path
-    const filePath = path.join(__dirname, '..', 'uploads', path.basename(pdf.filePath));
-    console.log('Serving PDF file:', {
-      filePath,
-      exists: fs.existsSync(filePath),
-      originalPath: pdf.filePath
-    });
-
+    const filePath = path.join(__dirname, '..', pdf.filePath);
     if (!fs.existsSync(filePath)) {
-      console.log('PDF file not found:', filePath);
-      return res.status(404).json({ message: 'PDF file not found' });
+      return res.status(404).json({ message: 'File not found' });
     }
 
-    // Set appropriate headers
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${pdf.name}"`);
+    res.setHeader('Content-Disposition', 'inline');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
 
-    // Stream the file
     const fileStream = fs.createReadStream(filePath);
-    fileStream.on('error', (error) => {
-      console.error('Error streaming file:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ message: 'Error streaming PDF file' });
-      }
-    });
-
     fileStream.pipe(res);
   } catch (error) {
-    console.error('Error serving PDF file:', {
-      error: error.message,
-      stack: error.stack,
-      pdfId: req.params.id,
-      userId: req.user?.id
-    });
+    console.error('Error serving PDF file:', error);
     res.status(500).json({ message: 'Error serving PDF file' });
+  }
+});
+
+// Record PDF view
+router.post('/:id/view', auth, async (req, res) => {
+  try {
+    const pdf = await PDF.findById(req.params.id);
+    if (!pdf) {
+      return res.status(404).json({ message: 'PDF not found' });
+    }
+
+    pdf.views.push({
+      user: req.user.id,
+      timestamp: new Date()
+    });
+    pdf.lastViewed = new Date();
+    await pdf.save();
+
+    res.json({ message: 'View recorded' });
+  } catch (error) {
+    console.error('Error recording view:', error);
+    res.status(500).json({ message: 'Error recording view' });
   }
 });
 

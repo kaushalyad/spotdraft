@@ -27,10 +27,27 @@ app.use(cors({
   origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
-  exposedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'x-auth-token',
+    'cache-control',
+    'pragma',
+    'if-none-match',
+    'if-modified-since'
+  ],
+  exposedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'x-auth-token',
+    'cache-control',
+    'pragma',
+    'if-none-match',
+    'if-modified-since'
+  ],
   preflightContinue: false,
-  optionsSuccessStatus: 204
+  optionsSuccessStatus: 204,
+  maxAge: 86400 // 24 hours
 }));
 
 app.use(express.json());
