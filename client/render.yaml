@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: spotdraft-frontend
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./build
+    headers:
+      - path: /*
+        name: Content-Type
+        value: application/javascript
+      - path: /static/*
+        name: Content-Type
+        value: application/javascript
+      - path: /*.js
+        name: Content-Type
+        value: application/javascript
+      - path: /*.css
+        name: Content-Type
+        value: text/css
+      - path: /*.html
+        name: Content-Type
+        value: text/html 
