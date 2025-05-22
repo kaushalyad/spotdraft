@@ -1,7 +1,5 @@
 const config = {
-  API_URL: process.env.NODE_ENV === 'production' 
-    ? 'https://spotdraft-backend.onrender.com'
-    : 'http://localhost:5000'
+  API_URL: 'https://spotdraft-backend.onrender.com'
 };
 
 export default config; 

@@ -26,12 +26,13 @@ import {
   Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import config from '../config';
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 // API base URL
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = config.API_URL;
 
 const SharedPDFViewer = () => {
   const { token } = useParams();

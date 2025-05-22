@@ -12,6 +12,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import config from '../config';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   marginTop: theme.spacing(8),
@@ -49,7 +50,7 @@ const ResetPassword = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/auth/reset-password', {
+      const response = await fetch(`${config.API_URL}/auth/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

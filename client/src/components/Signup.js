@@ -10,6 +10,7 @@ import {
   Box,
   Alert
 } from '@mui/material';
+import config from '../config';
 
 function Signup() {
   const [name, setName] = useState('');
@@ -22,7 +23,7 @@ function Signup() {
     e.preventDefault();
     setError('');
     try {
-      await axios.post('http://localhost:5000/auth/signup', 
+      await axios.post(`${config.API_URL}/auth/signup`, 
         { name, email, password },
         {
           headers: {

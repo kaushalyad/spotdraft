@@ -81,9 +81,10 @@ import {
 import { styled } from '@mui/material/styles';
 import { debounce } from 'lodash';
 import { format } from 'date-fns';
+import config from '../config';
 
 // Add API URL constant
-const API_URL = 'http://localhost:5000';
+const API_URL = config.API_URL;
 
 // Styled components
 const Search = styled('div')(({ theme }) => ({
@@ -633,7 +634,7 @@ const Dashboard = memo(() => {
       }
 
       console.log('Fetching dashboard data');
-      const response = await fetch('http://localhost:5000/dashboard', {
+      const response = await fetch(`${API_URL}/dashboard`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -720,7 +721,7 @@ const Dashboard = memo(() => {
       formData.append('description', pdfDescription);
 
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/pdf/upload', {
+      const response = await fetch(`${API_URL}/pdf/upload`, {
         method: 'POST',
         headers: {
           'x-auth-token': token

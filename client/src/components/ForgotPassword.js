@@ -12,6 +12,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import config from '../config';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   marginTop: theme.spacing(8),
@@ -36,7 +37,7 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/auth/forgot-password', {
+      const response = await fetch(`${config.API_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

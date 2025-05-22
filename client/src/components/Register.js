@@ -27,8 +27,9 @@ import {
   Person as PersonIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import config from '../config';
 
-const API_URL = 'http://localhost:5000';
+const API_URL = config.API_URL;
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   marginTop: theme.spacing(8),

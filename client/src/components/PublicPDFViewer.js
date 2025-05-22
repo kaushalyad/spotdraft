@@ -17,11 +17,12 @@ import {
   Divider,
   CircularProgress
 } from '@mui/material';
+import config from '../config';
 
 // Import PDF.js worker
 import 'pdfjs-dist/build/pdf.worker.entry';
 
-const API_URL = 'http://localhost:5000';
+const API_URL = config.API_URL;
 
 const PublicPDFViewer = () => {
   const { token } = useParams();

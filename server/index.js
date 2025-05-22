@@ -75,19 +75,52 @@ const connectDB = async () => {
   try {
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/spotdraft';
     console.log('Attempting to connect to MongoDB...');
-    await mongoose.connect(mongoURI, {
+    
+    const options = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 30000, // Increase timeout to 30 seconds
       socketTimeoutMS: 45000,
-    });
+      family: 4, // Force IPv4
+      retryWrites: true,
+      w: 'majority',
+      maxPoolSize: 10,
+      minPoolSize: 5,
+      maxIdleTimeMS: 30000,
+      connectTimeoutMS: 30000,
+    };
+
+    await mongoose.connect(mongoURI, options);
     console.log('MongoDB connected successfully');
   } catch (err) {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
+    console.error('MongoDB connection error:', {
+      message: err.message,
+      name: err.name,
+      code: err.code,
+      stack: err.stack
+    });
+    
+    // Don't exit the process, just log the error
+    console.log('Will retry connection in 5 seconds...');
+    setTimeout(connectDB, 5000);
   }
 };
 
+// Handle MongoDB connection events
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected. Attempting to reconnect...');
+  setTimeout(connectDB, 5000);
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('MongoDB reconnected successfully');
+});
+
+// Initial connection
 connectDB();
 
 // Import routes
