@@ -15,7 +15,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -26,7 +26,7 @@ app.use(cors({
 
 // Handle preflight requests
 app.options('*', cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: ['https://spotdraft-w59a.onrender.com', 'http://localhost:3000'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization', 'Accept'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
