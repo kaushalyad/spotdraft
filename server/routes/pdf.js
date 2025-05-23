@@ -1042,7 +1042,8 @@ router.get('/:id/file', auth, async (req, res) => {
     console.log('PDF file request received:', {
       pdfId: req.params.id,
       userId: req.user.id,
-      headers: req.headers
+      headers: req.headers,
+      authToken: req.headers['x-auth-token']
     });
 
     const pdf = await PDF.findById(req.params.id);
@@ -1061,7 +1062,8 @@ router.get('/:id/file', auth, async (req, res) => {
       console.log('User not authorized:', {
         userId: req.user.id,
         ownerId: pdf.owner.toString(),
-        isPublic: pdf.isPublic
+        isPublic: pdf.isPublic,
+        sharedWith: pdf.sharedWith.map(share => share.user.toString())
       });
       return res.status(403).json({ message: 'Not authorized to view this PDF' });
     }
@@ -1071,7 +1073,8 @@ router.get('/:id/file', auth, async (req, res) => {
     console.log('Checking local file:', {
       filePath: pdf.filePath,
       localFilePath,
-      exists: fs.existsSync(localFilePath)
+      exists: fs.existsSync(localFilePath),
+      fileStats: fs.existsSync(localFilePath) ? fs.statSync(localFilePath) : null
     });
 
     if (fs.existsSync(localFilePath)) {
@@ -1079,12 +1082,19 @@ router.get('/:id/file', auth, async (req, res) => {
       console.log('Serving local file:', localFilePath);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="${pdf.name}.pdf"`);
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Pragma', 'no-cache');
       
       const fileStream = fs.createReadStream(localFilePath);
       fileStream.pipe(res);
 
       fileStream.on('error', (error) => {
-        console.error('Error streaming local file:', error);
+        console.error('Error streaming local file:', {
+          error: error.message,
+          stack: error.stack,
+          pdfId: pdf._id,
+          filePath: localFilePath
+        });
         if (!res.headersSent) {
           res.status(500).json({ message: 'Error streaming PDF file' });
         }
@@ -1104,7 +1114,21 @@ router.get('/:id/file', auth, async (req, res) => {
       }
     } else {
       // Try to serve from S3
-      console.log('Local file not found, trying S3:', pdf.filePath);
+      console.log('Local file not found, trying S3:', {
+        pdfId: pdf._id,
+        filePath: pdf.filePath,
+        bucket: process.env.AWS_S3_BUCKET,
+        region: process.env.AWS_REGION
+      });
+
+      if (!process.env.AWS_S3_BUCKET || !process.env.AWS_REGION) {
+        console.error('S3 configuration missing:', {
+          hasBucket: !!process.env.AWS_S3_BUCKET,
+          hasRegion: !!process.env.AWS_REGION
+        });
+        return res.status(500).json({ message: 'S3 configuration error' });
+      }
+
       try {
         const command = new GetObjectCommand({
           Bucket: process.env.AWS_S3_BUCKET,
@@ -1138,7 +1162,9 @@ router.get('/:id/file', auth, async (req, res) => {
           error: s3Error.message,
           stack: s3Error.stack,
           pdfId: pdf._id,
-          filePath: pdf.filePath
+          filePath: pdf.filePath,
+          bucket: process.env.AWS_S3_BUCKET,
+          region: process.env.AWS_REGION
         });
         return res.status(500).json({ 
           message: 'Error accessing PDF file',
@@ -1151,7 +1177,8 @@ router.get('/:id/file', auth, async (req, res) => {
       error: error.message,
       stack: error.stack,
       pdfId: req.params.id,
-      userId: req.user.id
+      userId: req.user?.id,
+      headers: req.headers
     });
     res.status(500).json({ 
       message: 'Error serving PDF file',

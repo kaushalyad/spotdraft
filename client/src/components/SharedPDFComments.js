@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   Box,
-  Paper,
   Typography,
   TextField,
   Button,
@@ -10,332 +10,370 @@ import {
   ListItemText,
   ListItemAvatar,
   Avatar,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Divider,
   CircularProgress,
+  Snackbar,
   Alert,
-  Snackbar
+  IconButton,
+  Paper
 } from '@mui/material';
 import {
-  Comment as CommentIcon,
   Reply as ReplyIcon,
-  Send as SendIcon,
-  Person as PersonIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
-import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import config from '../config';
 
-const SharedPDFComments = ({ onCommentAdd }) => {
-  const { shareId } = useParams();
+const API_URL = config.API_URL;
+
+export default function SharedPDFComments({ onCommentAdd }) {
+  const { token } = useParams();
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
-  const [guestName, setGuestName] = useState('');
-  const [guestEmail, setGuestEmail] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [guestInfo, setGuestInfo] = useState({
+    name: localStorage.getItem('guestName') || 'Anonymous',
+    email: localStorage.getItem('guestEmail') || null
+  });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'error'
+  });
 
   useEffect(() => {
+    if (!token) {
+      setError('Invalid share token');
+      setLoading(false);
+      return;
+    }
+
     fetchComments();
-  }, [shareId]);
+  }, [token]);
 
   const fetchComments = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${config.API_URL}/pdf/shared/${shareId}/comments`);
+      setError(null);
+      
+      console.log('Fetching comments for token:', token);
+      const response = await axios.get(`${API_URL}/pdf/shared/${token}/comments`);
+      
+      console.log('Comments fetched successfully:', response.data);
       setComments(response.data.comments || []);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching comments:', error);
-      setError('Failed to load comments');
+      setError(error.response?.data?.message || 'Failed to fetch comments');
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to fetch comments',
+        severity: 'error'
+      });
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleCommentSubmit = async (e) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
+  const handleCommentSubmit = async () => {
+    if (!newComment.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Comment cannot be empty',
+        severity: 'error'
+      });
+      return;
+    }
+
+    if (!token) {
+      setSnackbar({
+        open: true,
+        message: 'Invalid share token',
+        severity: 'error'
+      });
+      return;
+    }
 
     try {
-      setLoading(true);
-      const response = await axios.post(`${config.API_URL}/pdf/shared/${shareId}/comments`, {
+      console.log('Adding comment:', {
+        token,
         content: newComment,
-        name: guestName || 'Anonymous',
-        email: guestEmail || null
+        page: pageNumber,
+        guestInfo
       });
 
-      setComments(response.data.comments || []);
+      const response = await axios.post(`${API_URL}/pdf/shared/${token}/comments`, {
+        content: newComment.trim(),
+        page: pageNumber,
+        position: { x: 0, y: 0 },
+        ...guestInfo
+      });
+
+      console.log('Comment added successfully:', response.data);
+
+      // Update the comments state with the new comment
+      setComments(prevComments => [...prevComments, response.data]);
       setNewComment('');
-      setSuccess('Comment added successfully');
+      setSnackbar({
+        open: true,
+        message: 'Comment added successfully',
+        severity: 'success'
+      });
+
       if (onCommentAdd) {
         onCommentAdd(response.data);
       }
     } catch (error) {
       console.error('Error adding comment:', error);
-      setError('Failed to add comment');
-    } finally {
-      setLoading(false);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Error adding comment',
+        severity: 'error'
+      });
     }
   };
 
-  const handleReplySubmit = async (commentId) => {
-    if (!replyContent.trim()) return;
+  const handleReply = async (parentCommentId) => {
+    if (!replyContent.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Reply cannot be empty',
+        severity: 'error'
+      });
+      return;
+    }
+
+    if (!token) {
+      setSnackbar({
+        open: true,
+        message: 'Invalid share token',
+        severity: 'error'
+      });
+      return;
+    }
 
     try {
-      setLoading(true);
-      const response = await axios.post(
-        `${config.API_URL}/pdf/shared/${shareId}/comments/${commentId}/replies`,
-        {
-          content: replyContent,
-          name: guestName || 'Anonymous',
-          email: guestEmail || null
-        }
-      );
+      console.log('Adding reply:', {
+        token,
+        commentId: parentCommentId,
+        content: replyContent,
+        guestInfo
+      });
 
-      setComments(response.data.comments || []);
+      const response = await axios.post(`${API_URL}/pdf/shared/${token}/comments/${parentCommentId}/replies`, {
+        content: replyContent.trim(),
+        formattedContent: replyContent.trim(),
+        ...guestInfo
+      });
+
+      console.log('Reply added successfully:', response.data);
+
+      // Update the comments state with the new reply
+      setComments(prevComments => 
+        prevComments.map(comment => 
+          comment._id === parentCommentId
+            ? { ...comment, replies: [...(comment.replies || []), response.data] }
+            : comment
+        )
+      );
       setReplyContent('');
       setReplyTo(null);
-      setSuccess('Reply added successfully');
+      setSnackbar({
+        open: true,
+        message: 'Reply added successfully',
+        severity: 'success'
+      });
+
       if (onCommentAdd) {
         onCommentAdd(response.data);
       }
     } catch (error) {
       console.error('Error adding reply:', error);
-      setError('Failed to add reply');
-    } finally {
-      setLoading(false);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Error adding reply',
+        severity: 'error'
+      });
     }
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
-  const handleGuestInfoSubmit = () => {
-    if (guestName.trim()) {
-      setOpenDialog(false);
-    }
-  };
+  if (error) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 800, mx: 'auto', p: 2 }}>
-      <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Comments
-        </Typography>
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h6" gutterBottom>
+        Comments ({comments.length})
+      </Typography>
 
-        {/* Guest Info Dialog */}
-        <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-          <DialogTitle>Enter Your Information</DialogTitle>
-          <DialogContent>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Your Name"
-              fullWidth
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              required
-            />
-            <TextField
-              margin="dense"
-              label="Your Email (optional)"
-              fullWidth
-              value={guestEmail}
-              onChange={(e) => setGuestEmail(e.target.value)}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-            <Button onClick={handleGuestInfoSubmit} variant="contained">
-              Continue
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* New Comment Form */}
-        <Box component="form" onSubmit={handleCommentSubmit} sx={{ mb: 3 }}>
-          <TextField
-            fullWidth
-            multiline
-            rows={3}
-            variant="outlined"
-            placeholder="Add a comment..."
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            onClick={() => !guestName && setOpenDialog(true)}
-            sx={{ mb: 1 }}
-          />
+      {/* Comment Input */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <TextField
+          fullWidth
+          multiline
+          rows={3}
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          placeholder="Add a comment..."
+          variant="outlined"
+          sx={{ mb: 1 }}
+        />
+        <span>
           <Button
-            type="submit"
             variant="contained"
-            endIcon={<SendIcon />}
-            disabled={loading || !newComment.trim()}
+            onClick={handleCommentSubmit}
+            disabled={!newComment.trim()}
+            fullWidth
           >
-            Post Comment
+            Add Comment
           </Button>
-        </Box>
+        </span>
+      </Paper>
 
-        {/* Comments List */}
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <List>
-            {comments.map((comment) => (
-              <React.Fragment key={comment._id}>
-                <ListItem alignItems="flex-start">
-                  <ListItemAvatar>
-                    <Avatar>
-                      <PersonIcon />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={
-                      <Typography variant="subtitle1">
-                        {comment.guestInfo?.name || 'Anonymous'}
-                        <Typography
-                          component="span"
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ ml: 1 }}
-                        >
-                          {formatDate(comment.createdAt)}
-                        </Typography>
-                      </Typography>
-                    }
-                    secondary={
-                      <>
-                        <Typography
-                          component="span"
-                          variant="body1"
-                          color="text.primary"
-                          sx={{ display: 'block', mb: 1 }}
-                        >
-                          {comment.content}
-                        </Typography>
-                        <Button
-                          size="small"
-                          startIcon={<ReplyIcon />}
-                          onClick={() => {
-                            if (!guestName) {
-                              setOpenDialog(true);
-                            } else {
-                              setReplyTo(comment._id);
-                            }
-                          }}
-                        >
-                          Reply
-                        </Button>
-                      </>
-                    }
-                  />
-                </ListItem>
-
-                {/* Replies */}
-                {comment.replies?.map((reply) => (
-                  <ListItem
-                    key={reply._id}
-                    alignItems="flex-start"
-                    sx={{ pl: 9 }}
-                  >
-                    <ListItemAvatar>
-                      <Avatar sx={{ width: 32, height: 32 }}>
-                        <PersonIcon />
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Typography variant="subtitle2">
-                          {reply.guestInfo?.name || 'Anonymous'}
-                          <Typography
-                            component="span"
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ ml: 1 }}
-                          >
-                            {formatDate(reply.createdAt)}
-                          </Typography>
-                        </Typography>
-                      }
-                      secondary={reply.content}
-                    />
-                  </ListItem>
-                ))}
-
-                {/* Reply Form */}
-                {replyTo === comment._id && (
-                  <Box sx={{ pl: 9, pr: 2, py: 1 }}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={2}
-                      variant="outlined"
-                      placeholder="Write a reply..."
-                      value={replyContent}
-                      onChange={(e) => setReplyContent(e.target.value)}
-                      sx={{ mb: 1 }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1 }}>
+      {/* Comments List */}
+      <List>
+        {comments.map((comment) => (
+          <React.Fragment key={comment._id}>
+            <ListItem alignItems="flex-start">
+              <ListItemAvatar>
+                <Avatar>{comment.user?.name?.[0] || 'A'}</Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="subtitle2">
+                      {comment.user?.name || 'Anonymous'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(comment.createdAt).toLocaleString()}
+                    </Typography>
+                  </Box>
+                }
+                secondary={
+                  <Box>
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      color="text.primary"
+                      sx={{ display: 'block', mb: 1 }}
+                    >
+                      {comment.content}
+                    </Typography>
+                    <span>
                       <Button
-                        variant="contained"
                         size="small"
-                        onClick={() => handleReplySubmit(comment._id)}
-                        disabled={loading || !replyContent.trim()}
+                        startIcon={<ReplyIcon />}
+                        onClick={() => setReplyTo(comment._id)}
                       >
                         Reply
                       </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={() => {
-                          setReplyTo(null);
-                          setReplyContent('');
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </Box>
+                    </span>
                   </Box>
-                )}
-                <Divider variant="inset" component="li" />
-              </React.Fragment>
+                }
+              />
+            </ListItem>
+
+            {/* Reply Input */}
+            {replyTo === comment._id && (
+              <Box sx={{ pl: 7, pr: 2, mb: 2 }}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  placeholder="Write a reply..."
+                  variant="outlined"
+                  size="small"
+                  sx={{ mb: 1 }}
+                />
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                  <span>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setReplyTo(null);
+                        setReplyContent('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </span>
+                  <span>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => handleReply(comment._id)}
+                      disabled={!replyContent.trim()}
+                    >
+                      Reply
+                    </Button>
+                  </span>
+                </Box>
+              </Box>
+            )}
+
+            {/* Replies */}
+            {comment.replies?.map((reply) => (
+              <ListItem key={reply._id} sx={{ pl: 7 }}>
+                <ListItemAvatar>
+                  <Avatar sx={{ width: 24, height: 24 }}>
+                    {reply.user?.name?.[0] || 'A'}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="subtitle2" sx={{ fontSize: '0.875rem' }}>
+                        {reply.user?.name || 'Anonymous'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(reply.createdAt).toLocaleString()}
+                      </Typography>
+                    </Box>
+                  }
+                  secondary={reply.content}
+                />
+              </ListItem>
             ))}
-          </List>
-        )}
-      </Paper>
+            <Divider variant="inset" component="li" />
+          </React.Fragment>
+        ))}
+      </List>
 
-      {/* Notifications */}
+      {/* Snackbar for notifications */}
       <Snackbar
-        open={!!error}
+        open={snackbar.open}
         autoHideDuration={6000}
-        onClose={() => setError(null)}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      </Snackbar>
-
-      <Snackbar
-        open={!!success}
-        autoHideDuration={6000}
-        onClose={() => setSuccess(null)}
-      >
-        <Alert severity="success" onClose={() => setSuccess(null)}>
-          {success}
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
         </Alert>
       </Snackbar>
     </Box>
   );
-};
-
-export default SharedPDFComments; 
+} 

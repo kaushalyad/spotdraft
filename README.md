@@ -56,11 +56,21 @@ touch .env
 
 Add the following to your `.env` file:
 ```env
+# Development
 MONGODB_URI=mongodb://localhost:27017/spotdraft
 JWT_SECRET=your_jwt_secret
 PORT=5000
 NODE_ENV=development
 FRONTEND_URL=http://localhost:3000
+API_URL=http://localhost:5000
+
+# Production
+MONGODB_URI=your_mongodb_uri
+JWT_SECRET=your_jwt_secret
+PORT=5000
+NODE_ENV=production
+FRONTEND_URL=http://localhost:3000
+API_URL=http://localhost:5000
 ```
 
 ### 3. Frontend Setup
@@ -77,15 +87,18 @@ touch .env
 
 Add the following to your `.env` file:
 ```env
+# Development
+REACT_APP_API_URL=http://localhost:5000
+REACT_APP_FRONTEND_URL=http://localhost:3000
+
+# Production
 REACT_APP_API_URL=http://localhost:5000
 REACT_APP_FRONTEND_URL=http://localhost:3000
 ```
 
-## Local Deployment
+## Running the Application
 
 ### 1. Start MongoDB
-First, ensure MongoDB is running on your local machine:
-
 ```bash
 # On Windows
 net start MongoDB
@@ -97,8 +110,6 @@ mongod --dbpath /path/to/data/db
 ```
 
 ### 2. Start the Backend Server
-Open a new terminal window and run:
-
 ```bash
 cd server
 npm start
@@ -107,8 +118,6 @@ npm start
 The backend server will be available at http://localhost:5000
 
 ### 3. Start the Frontend Development Server
-Open another terminal window and run:
-
 ```bash
 cd client
 npm start
@@ -116,203 +125,137 @@ npm start
 
 The frontend application will be available at http://localhost:3000
 
-### 4. Verify the Deployment
-1. Open your browser and navigate to http://localhost:3000
-2. You should see the SpotDraft login page
-3. Create a new account or log in with existing credentials
-4. Test the PDF upload and sharing functionality
+## API Configuration
 
-### Troubleshooting Local Deployment
+### Authentication Headers
+All API requests (except login/register) require the following headers:
+```javascript
+{
+  'Content-Type': 'application/json',
+  'x-auth-token': 'your_jwt_token'
+}
+```
 
-If you encounter any issues:
+### JWT Token
+- Token is received after successful login
+- Token expires after 1 hour
+- Token must be included in all authenticated requests
+- Token format: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
 
-1. **MongoDB Connection Issues**
-   - Verify MongoDB is running: `mongosh` or `mongo`
-   - Check if the MongoDB URI in `.env` is correct
-   - Ensure MongoDB is listening on the default port (27017)
+### API Endpoints
 
-2. **Backend Server Issues**
-   - Check if port 5000 is available
-   - Verify all environment variables are set correctly
-   - Check the server logs for any error messages
+#### Authentication
+- POST `/api/auth/register` - Register a new user
+- POST `/api/auth/login` - Login user
+- POST `/api/auth/forgot-password` - Request password reset
+- POST `/api/auth/reset-password` - Reset password
 
-3. **Frontend Issues**
-   - Clear browser cache
-   - Check browser console for errors
-   - Verify the API URL in the frontend `.env` file
+#### PDF Management
+- GET `/api/pdf` - Get all PDFs
+- POST `/api/pdf` - Upload new PDF
+- GET `/api/pdf/:id` - Get PDF by ID
+- DELETE `/api/pdf/:id` - Delete PDF
+- POST `/api/pdf/:id/share` - Share PDF
+- GET `/api/pdf/shared/:token` - Get shared PDF
 
-4. **Common Issues**
-   - If you get CORS errors, ensure the `FRONTEND_URL` in backend `.env` matches your frontend URL
-   - If PDF upload fails, check if the uploads directory exists in the server
-   - If authentication fails, verify the JWT_SECRET is set correctly
+### PDF Access
+To access PDFs, use the following URLs:
+
+1. **View PDF in Application**
+   - Frontend URL: `http://localhost:3000/pdf/:id`
+   - Example: `http://localhost:3000/pdf/682ffd09773cd6e40d773d20`
+
+2. **Access Shared PDF**
+   - Frontend URL: `http://localhost:3000/shared/:token`
+   - Example: `http://localhost:3000/shared/abc123`
+
+3. **Direct PDF File Access**
+   - Backend URL: `http://localhost:5000/api/pdf/:id/file`
+   - Example: `http://localhost:5000/api/pdf/682ffd09773cd6e40d773d20/file`
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+1. **404 Not Found Errors**
+   - Ensure you're using the correct API endpoint with `/api` prefix
+   - Check if the resource exists in the database
+   - Verify the URL structure matches the API documentation
+
+2. **403 Forbidden Errors**
+   - Check if your JWT token is valid and not expired
+   - Ensure you have the correct permissions
+   - Include the `x-auth-token` header in your request
+   - Log out and log back in to get a new token
+
+3. **CORS Errors**
+   - Verify the `FRONTEND_URL` in backend `.env` matches your frontend URL
+   - Check if the request includes the correct headers
+   - Ensure the backend CORS configuration is correct
+
+4. **Authentication Issues**
+   - Clear browser cache and cookies
+   - Check if the JWT token is properly stored
+   - Verify the token format and expiration
+   - Ensure the `JWT_SECRET` is properly set in the backend
+
+5. **PDF Upload Issues**
+   - Check if the uploads directory exists
+   - Verify file size limits
+   - Ensure proper file type validation
+   - Check server storage permissions
+
+6. **Database Connection Issues**
+   - Verify MongoDB is running
+   - Check the MongoDB connection string
+   - Ensure proper database permissions
+   - Check network connectivity
+
+### Error Codes
+- 401: Unauthorized - Missing or invalid token
+- 403: Forbidden - Token expired or insufficient permissions
+- 404: Not Found - Resource doesn't exist
+- 500: Server Error - Internal server error
+
+### Development Tools
+1. **Browser Developer Tools**
+   - Check Network tab for API requests
+   - Monitor Console for errors
+   - Verify request/response headers
+
+2. **Server Logs**
+   - Check backend console output
+   - Monitor MongoDB logs
+   - Review error messages
+
+3. **API Testing**
+   - Use Postman or similar tools
+   - Test endpoints with proper headers
+   - Verify response formats
 
 ## Production Deployment
 
-### Backend Deployment (Render)
-
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Set the following environment variables:
+### Backend Deployment
+1. Set the following environment variables:
    - `MONGODB_URI`
    - `JWT_SECRET`
    - `NODE_ENV=production`
-   - `FRONTEND_URL=https://spotdraft-w59a.onrender.com`
+   - `FRONTEND_URL=http://localhost:3000`
+   - `API_URL=http://localhost:5000`
 
-### Frontend Deployment (Render)
-
-1. Create a new Static Site on Render
-2. Connect your GitHub repository
-3. Set the following environment variables:
-   - `REACT_APP_API_URL=https://spotdraft-backend.onrender.com`
-   - `REACT_APP_FRONTEND_URL=https://spotdraft-w59a.onrender.com`
-
-## API Configuration
-
-### Backend API Configuration
-In the server's `.env` file:
-```env
-# Development
-API_URL=http://localhost:5000
-FRONTEND_URL=http://localhost:3000
-
-# Production
-API_URL=https://spotdraft-backend.onrender.com
-FRONTEND_URL=https://spotdraft-w59a.onrender.com
-```
-
-### Frontend API Configuration
-In the client's `.env` file:
-```env
-# Development
-REACT_APP_API_URL=http://localhost:5000
-REACT_APP_FRONTEND_URL=http://localhost:3000
-
-# Production
-REACT_APP_API_URL=https://spotdraft-backend.onrender.com
-REACT_APP_FRONTEND_URL=https://spotdraft-w59a.onrender.com
-```
-
-### API Call Examples
-
-1. **Authentication API Calls**
-```javascript
-// Login
-axios.post(`${API_URL}/auth/login`, {
-  email: 'user@example.com',
-  password: 'password'
-});
-
-// Register
-axios.post(`${API_URL}/auth/register`, {
-  name: 'John Doe',
-  email: 'user@example.com',
-  password: 'password'
-});
-```
-
-2. **PDF Management API Calls**
-```javascript
-// Upload PDF
-const formData = new FormData();
-formData.append('pdf', pdfFile);
-axios.post(`${API_URL}/pdf`, formData, {
-  headers: {
-    'Content-Type': 'multipart/form-data'
-  }
-});
-
-// Get PDF List
-axios.get(`${API_URL}/pdf`);
-
-// Share PDF
-axios.post(`${API_URL}/pdf/${pdfId}/share`, {
-  email: 'recipient@example.com',
-  permissions: ['view', 'comment']
-});
-```
-
-3. **Shared PDF Access**
-```javascript
-// Access Shared PDF
-axios.get(`${API_URL}/pdf/shared/${token}`);
-
-// Add Comment to Shared PDF
-axios.post(`${API_URL}/pdf/shared/${token}/comments`, {
-  content: 'Your comment here',
-  page: 1
-});
-```
-
-### API Response Format
-All API responses follow this format:
-```javascript
-{
-  success: true/false,
-  data: {}, // Response data
-  message: "Success/Error message",
-  error: {} // Error details if any
-}
-```
-
-### Error Handling
-```javascript
-try {
-  const response = await axios.get(`${API_URL}/pdf`);
-  // Handle success
-} catch (error) {
-  if (error.response) {
-    // Server responded with error
-    console.error('Error:', error.response.data.message);
-  } else if (error.request) {
-    // Request made but no response
-    console.error('No response received');
-  } else {
-    // Request setup error
-    console.error('Error:', error.message);
-  }
-}
-```
-
-### CORS Configuration
-The backend is configured to accept requests from:
-- Development: `http://localhost:3000`
-- Production: `https://spotdraft-w59a.onrender.com`
-
-### API Security
-- All API endpoints (except login/register) require JWT authentication
-- Include the JWT token in the Authorization header:
-```javascript
-axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-```
-
-## API Endpoints
-
-### Authentication
-- POST `/auth/register` - Register a new user
-- POST `/auth/login` - Login user
-- POST `/auth/forgot-password` - Request password reset
-- POST `/auth/reset-password` - Reset password
-
-### PDF Management
-- GET `/pdf` - Get all PDFs
-- POST `/pdf` - Upload new PDF
-- GET `/pdf/:id` - Get PDF by ID
-- DELETE `/pdf/:id` - Delete PDF
-- POST `/pdf/:id/share` - Share PDF
-- GET `/pdf/shared/:token` - Get shared PDF
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Frontend Deployment
+1. Set the following environment variables:
+   - `REACT_APP_API_URL=http://localhost:5000`
+   - `REACT_APP_FRONTEND_URL=http://localhost:3000`
 
 ## Support
 
-For support, email support@spotdraft.com or create an issue in the repository. 
+For support:
+1. Check the troubleshooting guide above
+2. Review the error logs
+3. Contact support@spotdraft.com
+4. Create an issue in the repository
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

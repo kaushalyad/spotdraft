@@ -1,6 +1,6 @@
 const config = {
-  API_URL: 'https://spotdraft-backend.onrender.com',
-  FRONTEND_URL: 'https://spotdraft-w59a.onrender.com',
+  API_URL: 'http://localhost:5000',
+  FRONTEND_URL: 'http://localhost:3000',
   API_CONFIG: {
     withCredentials: true,
     headers: {

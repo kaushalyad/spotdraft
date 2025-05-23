@@ -24,9 +24,7 @@ process.on('unhandledRejection', (err) => {
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://spotdraft-w59a.onrender.com']
-    : ['http://localhost:3000'],
+  origin: ['http://localhost:3000', 'https://spotdraft-w59a.onrender.com'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
