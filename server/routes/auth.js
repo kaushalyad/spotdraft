@@ -56,7 +56,10 @@ const sendEmail = async (to, subject, html) => {
 
     const msg = {
       to,
-      from: process.env.EMAIL_FROM,
+      from: {
+        email: process.env.EMAIL_FROM,
+        name: 'SpotDraft Team'
+      },
       subject,
       html,
       trackingSettings: {
@@ -69,19 +72,41 @@ const sendEmail = async (to, subject, html) => {
     console.log('From email:', process.env.EMAIL_FROM);
     console.log('Frontend URL:', process.env.FRONTEND_URL);
 
-    const response = await sgMail.send(msg);
-    console.log('Email sent successfully:', response);
-    return true;
-  } catch (error) {
-    console.error('Error sending email:', error);
-    if (error.response) {
-      console.error('SendGrid error details:', {
-        statusCode: error.response.statusCode,
-        body: error.response.body,
-        headers: error.response.headers
-      });
+    try {
+      const response = await sgMail.send(msg);
+      console.log('Email sent successfully:', response);
+      return true;
+    } catch (sendGridError) {
+      console.error('SendGrid error:', sendGridError);
+      if (sendGridError.response) {
+        console.error('SendGrid error details:', {
+          statusCode: sendGridError.response.statusCode,
+          body: sendGridError.response.body,
+          headers: sendGridError.response.headers
+        });
+        
+        // Check for specific error types
+        if (sendGridError.response.body?.errors) {
+          const errors = sendGridError.response.body.errors;
+          for (const error of errors) {
+            console.error('SendGrid error message:', error.message);
+            if (error.message.includes('verify')) {
+              throw new Error('Sender email not verified with SendGrid. Please verify your email address.');
+            }
+            if (error.message.includes('domain')) {
+              throw new Error('Sender domain not authenticated with SendGrid. Please authenticate your domain.');
+            }
+            if (error.message.includes('permission')) {
+              throw new Error('Insufficient SendGrid API permissions. Please check your API key settings.');
+            }
+          }
+        }
+      }
+      throw new Error('Failed to send email. Please try again later.');
     }
-    throw new Error('Failed to send email. Please try again later.');
+  } catch (error) {
+    console.error('Error in sendEmail:', error);
+    throw error;
   }
 };
 
@@ -207,8 +232,13 @@ router.post('/reset-password-request', async (req, res) => {
     await user.save();
     console.log('Reset token generated and saved');
 
+    // Determine the correct frontend URL based on environment
+    const frontendUrl = process.env.NODE_ENV === 'production' 
+      ? process.env.FRONTEND_URL 
+      : 'http://localhost:3000';
+
     // Send reset email using SendGrid
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
     console.log('Reset URL generated:', resetUrl);
 
     const emailHtml = `
@@ -225,6 +255,8 @@ router.post('/reset-password-request', async (req, res) => {
             Reset Password
           </a>
         </div>
+        <p style="color: #666; line-height: 1.6;">Or copy and paste this link in your browser:</p>
+        <p style="color: #666; line-height: 1.6; word-break: break-all;">${resetUrl}</p>
         <p style="color: #666; line-height: 1.6;">This link will expire in 1 hour.</p>
         <p style="color: #666; line-height: 1.6;">If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
         <hr style="border: 1px solid #eee; margin: 20px 0;">
@@ -236,6 +268,14 @@ router.post('/reset-password-request', async (req, res) => {
 
     try {
       console.log('Attempting to send reset password email');
+      console.log('Email configuration:', {
+        to: user.email,
+        from: process.env.EMAIL_FROM,
+        subject: 'Password Reset Request - SpotDraft',
+        resetUrl: resetUrl,
+        environment: process.env.NODE_ENV
+      });
+
       await sendEmail(user.email, 'Password Reset Request - SpotDraft', emailHtml);
       console.log('Reset password email sent successfully');
       res.json({ 
