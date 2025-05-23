@@ -145,18 +145,20 @@ app.use('/api/user', userRoutes);
 if (process.env.NODE_ENV === 'production') {
   // Serve static files from the React build directory
   app.use(express.static(path.join(__dirname, '../client/build'), {
-    setHeaders: (res, path) => {
+    setHeaders: (res, filePath) => {
       // Set proper MIME types for JavaScript files
-      if (path.endsWith('.js')) {
+      if (filePath.endsWith('.js')) {
         res.set('Content-Type', 'application/javascript');
       }
       // Set proper MIME types for CSS files
-      if (path.endsWith('.css')) {
+      if (filePath.endsWith('.css')) {
         res.set('Content-Type', 'text/css');
       }
       // Set cache headers
       res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
-      res.set('Access-Control-Allow-Origin', 'https://spotdraft-w59a.onrender.com');
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     }
   }));
 
@@ -164,6 +166,7 @@ if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/build', 'index.html'), {
       headers: {
+        'Content-Type': 'text/html',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0'

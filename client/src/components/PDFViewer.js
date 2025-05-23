@@ -127,6 +127,20 @@ export function PDFViewer() {
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
 
+  // Initialize arrays with empty arrays instead of undefined
+  const [views, setViews] = useState([]);
+  const [downloads, setDownloads] = useState([]);
+  const [sharedWith, setSharedWith] = useState([]);
+
+  // Add useEffect to initialize arrays when pdf data is loaded
+  useEffect(() => {
+    if (pdf) {
+      setViews(pdf.views || []);
+      setDownloads(pdf.downloads || []);
+      setSharedWith(pdf.sharedWith || []);
+    }
+  }, [pdf]);
+
   const onDocumentLoadSuccess = ({ numPages }) => {
     setNumPages(numPages);
     setError(null);
