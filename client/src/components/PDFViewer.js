@@ -191,7 +191,8 @@ export function PDFViewer() {
       console.log('Fetching PDF with ID:', id);
       console.log('Using token:', token ? 'Token exists' : 'No token');
 
-      const response = await fetch(`${API_URL}/pdf/${id}?populate=user`, {
+      // First fetch PDF metadata
+      const response = await fetch(`${API_URL}/pdf/${id}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -199,35 +200,56 @@ export function PDFViewer() {
         }
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error response:', errorData);
-        throw new Error(errorData.message || `Failed to fetch PDF (Status: ${response.status})`);
+        throw new Error(`Failed to fetch PDF: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log('PDF data received:', {
-        id: data._id,
-        name: data.name,
-        hasFilePath: !!data.filePath,
-        owner: data.owner ? data.owner._id : null
+      const pdfData = await response.json();
+      setPdf(pdfData);
+      setComments(pdfData.comments || []);
+
+      // Then fetch the actual PDF file
+      const pdfFileResponse = await fetch(`${API_URL}/pdf/${id}/file`, {
+        method: 'GET',
+        headers: {
+          'x-auth-token': token
+        }
       });
-      setPdf(data);
+
+      if (!pdfFileResponse.ok) {
+        throw new Error(`Failed to fetch PDF file: ${pdfFileResponse.statusText}`);
+      }
+
+      // Create a blob URL for the PDF
+      const pdfBlob = await pdfFileResponse.blob();
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      setPdfUrl(pdfUrl);
+
+      // Record view
+      try {
+        await fetch(`${API_URL}/pdf/${id}/view`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-token': token
+          }
+        });
+      } catch (viewError) {
+        console.error('Error recording view:', viewError);
+      }
+
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching PDF:', error);
-      setError(error.message || 'Failed to load PDF');
+      setError(error.message);
       setSnackbar({
         open: true,
-        message: error.message || 'Failed to load PDF',
+        message: error.message,
         severity: 'error'
       });
-    } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, API_URL]);
 
   // Update the fileProps configuration
   const fileProps = useMemo(() => ({
@@ -1598,7 +1620,29 @@ export function PDFViewer() {
                 boxShadow: 1,
                 overflow: 'hidden'
               }}>
-                {PDFDocument}
+                <Document
+                  file={pdfUrl}
+                  onLoadSuccess={onDocumentLoadSuccess}
+                  onLoadError={onDocumentLoadError}
+                  loading={
+                    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+                      <CircularProgress />
+                    </Box>
+                  }
+                >
+                  <Page
+                    pageNumber={pageNumber}
+                    scale={scale}
+                    rotate={rotation}
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
+                    onRenderSuccess={() => setIsLoadingPage(false)}
+                    onRenderError={(error) => {
+                      console.error('Error rendering page:', error);
+                      setError('Error rendering PDF page');
+                    }}
+                  />
+                </Document>
               </Box>
               <Box sx={{ 
                 display: 'flex', 

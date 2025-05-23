@@ -811,137 +811,43 @@ router.get('/:id/debug', auth, async (req, res) => {
 // Add comment to PDF
 router.post('/:id/comments', auth, async (req, res) => {
   try {
-    const pdf = await PDF.findById(req.params.id);
+    const { content } = req.body;
+    const pdfId = req.params.id;
 
+    if (!content) {
+      return res.status(400).json({ message: 'Comment content is required' });
+    }
+
+    const pdf = await PDF.findById(pdfId);
     if (!pdf) {
       return res.status(404).json({ message: 'PDF not found' });
     }
 
-    // Check if user has permission to comment
-    const hasPermission = 
-      pdf.owner.toString() === req.user.id ||
-      pdf.sharedWith.includes(req.user.id) ||
-      pdf.isPublic;
-
-    if (!hasPermission) {
+    // Check if user has access to the PDF
+    if (pdf.owner.toString() !== req.user.id && 
+        !pdf.sharedWith.some(share => share.user.toString() === req.user.id)) {
       return res.status(403).json({ message: 'Not authorized to comment on this PDF' });
     }
 
-    // Get user info before creating comment
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Create comment with explicit timestamps
-    const now = new Date();
     const comment = {
-      user: user._id,
-      content: req.body.content,
-      formattedContent: req.body.formattedContent,
-      page: req.body.page,
-      position: req.body.position,
-      createdAt: now,
-      updatedAt: now
+      user: req.user.id,
+      content,
+      createdAt: new Date()
     };
 
     pdf.comments.push(comment);
     await pdf.save();
 
-    // Fetch the updated PDF with populated user information
-    const updatedPdf = await PDF.findById(req.params.id)
-      .populate('owner', 'name email')
-      .populate('comments.user', 'name email')
-      .populate('comments.replies.user', 'name email');
+    // Populate user details for the new comment
+    await pdf.populate('comments.user', 'name');
 
-    // Calculate total comments including replies
-    const totalComments = updatedPdf.comments.reduce((total, comment) => {
-      return total + 1 + (comment.replies ? comment.replies.length : 0);
-    }, 0);
-
-    // Ensure the new comment has user information
-    const response = {
-      ...updatedPdf.toObject(),
-      totalComments,
-      totalViews: updatedPdf.views.length,
-      totalDownloads: updatedPdf.downloads.length
-    };
-
-    // Ensure the last comment (newly added) has user information
-    if (response.comments && response.comments.length > 0) {
-      const lastComment = response.comments[response.comments.length - 1];
-      if (lastComment) {
-        lastComment.user = {
-          _id: user._id,
-          name: user.name,
-          email: user.email
-        };
-        // Ensure timestamps are properly set
-        lastComment.createdAt = now;
-        lastComment.updatedAt = now;
-      }
-    }
-
-    res.json(response);
-  } catch (err) {
-    console.error('Error adding comment:', err);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Add reply to a comment
-router.post('/:id/comments/:commentId/replies', auth, async (req, res) => {
-  try {
-    const pdf = await PDF.findById(req.params.id);
-
-    if (!pdf) {
-      return res.status(404).json({ message: 'PDF not found' });
-    }
-
-    // Check if user has permission to reply
-    const hasPermission = 
-      pdf.owner.toString() === req.user.id ||
-      pdf.sharedWith.includes(req.user.id) ||
-      pdf.isPublic;
-
-    if (!hasPermission) {
-      return res.status(403).json({ message: 'Not authorized to reply on this PDF' });
-    }
-
-    const comment = pdf.comments.id(req.params.commentId);
-    if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
-
-    const reply = {
-      user: req.user.id,
-      content: req.body.content,
-      formattedContent: req.body.formattedContent
-    };
-
-    comment.replies.push(reply);
-    await pdf.save();
-
-    // Fetch the updated PDF with populated user information
-    const updatedPdf = await PDF.findById(req.params.id)
-      .populate('owner', 'name email')
-      .populate('comments.user', 'name email')
-      .populate('comments.replies.user', 'name email');
-
-    // Calculate total comments including replies
-    const totalComments = updatedPdf.comments.reduce((total, comment) => {
-      return total + 1 + (comment.replies ? comment.replies.length : 0);
-    }, 0);
-
-    res.json({
-      ...updatedPdf.toObject(),
-      totalComments,
-      totalViews: updatedPdf.views.length,
-      totalDownloads: updatedPdf.downloads.length
+    res.status(201).json({
+      message: 'Comment added successfully',
+      comment: pdf.comments[pdf.comments.length - 1]
     });
-  } catch (err) {
-    console.error('Error adding reply:', err);
-    res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    res.status(500).json({ message: 'Error adding comment', error: error.message });
   }
 });
 
@@ -949,67 +855,29 @@ router.post('/:id/comments/:commentId/replies', auth, async (req, res) => {
 router.get('/:id/comments', auth, async (req, res) => {
   try {
     const pdf = await PDF.findById(req.params.id)
-      .populate('comments.user', 'name email')
-      .populate('comments.replies.user', 'name email');
+      .populate('comments.user', 'name');
 
     if (!pdf) {
       return res.status(404).json({ message: 'PDF not found' });
     }
 
-    // Check if user has permission to view comments
-    const canView = pdf.owner.toString() === req.user.id || 
-      pdf.sharedWith.some(share => share.user.toString() === req.user.id) ||
-      pdf.isPublic;
-
-    if (!canView) {
-      return res.status(403).json({ message: 'Not authorized to view comments' });
+    // Check if user has access to the PDF
+    if (pdf.owner.toString() !== req.user.id && 
+        !pdf.sharedWith.some(share => share.user.toString() === req.user.id)) {
+      return res.status(403).json({ message: 'Not authorized to view comments on this PDF' });
     }
 
-    // Return comments with their replies
     res.json(pdf.comments);
   } catch (error) {
     console.error('Error fetching comments:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Error fetching comments', error: error.message });
   }
 });
 
-// Update comment
-router.put('/:id/comments/:commentId', auth, async (req, res) => {
-  try {
-    const { content, formattedContent } = req.body;
-    const pdf = await PDF.findById(req.params.id);
-
-    if (!pdf) {
-      return res.status(404).json({ message: 'PDF not found' });
-    }
-
-    const comment = pdf.comments.id(req.params.commentId);
-    if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
-
-    // Check if user is the comment author
-    if (comment.user.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized to edit this comment' });
-    }
-
-    comment.content = content;
-    comment.formattedContent = formattedContent;
-    comment.updatedAt = Date.now();
-    await pdf.save();
-
-    res.json(comment);
-  } catch (error) {
-    console.error('Error updating comment:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Delete comment
+// Delete comment from PDF
 router.delete('/:id/comments/:commentId', auth, async (req, res) => {
   try {
     const pdf = await PDF.findById(req.params.id);
-
     if (!pdf) {
       return res.status(404).json({ message: 'PDF not found' });
     }
@@ -1020,19 +888,18 @@ router.delete('/:id/comments/:commentId', auth, async (req, res) => {
     }
 
     // Check if user is the comment author or PDF owner
-    if (comment.user.toString() !== req.user.id && pdf.owner.toString() !== req.user.id) {
+    if (comment.user.toString() !== req.user.id && 
+        pdf.owner.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to delete this comment' });
     }
 
-    // Remove comment and its replies
-    const commentIndex = pdf.comments.indexOf(comment);
-    pdf.comments.splice(commentIndex, 1);
+    comment.remove();
     await pdf.save();
 
     res.json({ message: 'Comment deleted successfully' });
   } catch (error) {
     console.error('Error deleting comment:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Error deleting comment', error: error.message });
   }
 });
 
@@ -1142,8 +1009,20 @@ router.get('/:id/file', auth, async (req, res) => {
           urlLength: signedUrl.length
         });
 
-        // Redirect to the signed URL
-        res.redirect(signedUrl);
+        // Instead of redirecting, proxy the file through our server
+        const response = await fetch(signedUrl);
+        if (!response.ok) {
+          throw new Error(`S3 request failed with status ${response.status}`);
+        }
+
+        // Set appropriate headers
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${pdf.name}.pdf"`);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Pragma', 'no-cache');
+
+        // Stream the file
+        response.body.pipe(res);
 
         // Increment view count only if last view was more than 5 minutes ago
         const lastView = pdf.lastViewed || new Date(0);
