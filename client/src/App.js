@@ -19,7 +19,7 @@ const App = () => {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/pdf/:id" element={<PDFViewer />} />
-          <Route path="/shared/:shareId" element={<SharedPDFViewer />} />
+          <Route path="/shared/:token" element={<SharedPDFViewer />} />
           <Route path="/" element={<Dashboard />} />
         </Routes>
       </Router>

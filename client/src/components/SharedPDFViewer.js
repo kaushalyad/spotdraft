@@ -52,7 +52,7 @@ import SharedPDFComments from './SharedPDFComments';
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 function SharedPDFViewer() {
-  const { shareId } = useParams();
+  const { token } = useParams();
   const navigate = useNavigate();
   const { t } = useSettings();
   const [loading, setLoading] = useState(true);
@@ -75,7 +75,7 @@ function SharedPDFViewer() {
 
   // Memoize the file props
   const fileProps = useMemo(() => ({
-    url: `${config.API_URL}/pdf/shared/${shareId}/file`,
+    url: `${config.API_URL}/pdf/shared/${token}/file`,
     httpHeaders: {
       'Content-Type': 'application/pdf',
       'Cache-Control': 'no-cache',
@@ -98,7 +98,7 @@ function SharedPDFViewer() {
       });
       setIsLoadingPage(false);
     }
-  }), [shareId]);
+  }), [token]);
 
   // Memoize the PDF options
   const pdfOptions = useMemo(() => ({
@@ -122,7 +122,7 @@ function SharedPDFViewer() {
       try {
         setLoading(true);
         setError('');
-        const response = await axios.get(`${config.API_URL}/pdf/shared/${shareId}`);
+        const response = await axios.get(`${config.API_URL}/pdf/shared/${token}`);
         setPdfData(response.data);
         
         if (response.data.requiresPassword) {
@@ -136,11 +136,11 @@ function SharedPDFViewer() {
     };
 
     fetchSharedPDF();
-  }, [shareId]);
+  }, [token]);
 
   const handlePasswordSubmit = async () => {
     try {
-      const response = await axios.post(`${config.API_URL}/pdf/shared/${shareId}/verify`, {
+      const response = await axios.post(`${config.API_URL}/pdf/shared/${token}/verify`, {
         password,
         ...guestInfo
       });
@@ -195,7 +195,7 @@ function SharedPDFViewer() {
 
   const handleDownload = async () => {
     try {
-      const response = await axios.get(`${config.API_URL}/pdf/shared/${shareId}/file`, {
+      const response = await axios.get(`${config.API_URL}/pdf/shared/${token}/file`, {
         responseType: 'blob',
         headers: {
           'Content-Type': 'application/pdf',
@@ -493,7 +493,7 @@ function SharedPDFViewer() {
               p: 2
             }}>
               <SharedPDFComments
-                token={shareId}
+                token={token}
                 onCommentAdd={(newComment) => {
                   setPdfData(prev => ({
                     ...prev,
@@ -536,7 +536,7 @@ function SharedPDFViewer() {
         </DialogTitle>
         <DialogContent dividers>
           <SharedPDFComments
-            token={shareId}
+            token={token}
             onCommentAdd={(newComment) => {
               setPdfData(prev => ({
                 ...prev,
@@ -585,7 +585,7 @@ function SharedPDFViewer() {
         </DialogTitle>
         <DialogContent dividers>
           <SharedPDFComments
-            token={shareId}
+            token={token}
             onCommentAdd={(newComment) => {
               setPdfData(prev => ({
                 ...prev,
