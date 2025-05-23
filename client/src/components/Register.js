@@ -178,7 +178,7 @@ const Register = () => {
         if (loginResponse.data.token && loginResponse.data.user) {
           localStorage.setItem('token', loginResponse.data.token);
           localStorage.setItem('user', JSON.stringify(loginResponse.data.user));
-          navigate('/dashboard');
+          navigate('/');
         } else {
           setError('Registration successful but login failed');
         }
