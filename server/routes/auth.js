@@ -24,6 +24,12 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 // Helper function to send emails
 const sendEmail = async (to, subject, html) => {
   try {
+    // Log environment variables (without sensitive data)
+    console.log('Checking email configuration...');
+    console.log('SENDGRID_API_KEY exists:', !!process.env.SENDGRID_API_KEY);
+    console.log('EMAIL_FROM exists:', !!process.env.EMAIL_FROM);
+    console.log('FRONTEND_URL exists:', !!process.env.FRONTEND_URL);
+
     if (!process.env.SENDGRID_API_KEY) {
       throw new Error('SendGrid API key is not configured');
     }
@@ -149,25 +155,33 @@ router.get('/profile', auth, async (req, res) => {
 // Request password reset
 router.post('/reset-password-request', async (req, res) => {
   try {
+    console.log('Received reset password request');
     const { email } = req.body;
     
     if (!email) {
+      console.log('Email is missing from request');
       return res.status(400).json({ message: 'Email is required' });
     }
 
+    console.log('Looking up user with email:', email);
     const user = await User.findOne({ email });
     if (!user) {
+      console.log('No user found with email:', email);
       return res.status(404).json({ message: 'No account found with this email address' });
     }
 
+    console.log('User found, generating reset token');
     // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
     user.resetPasswordToken = resetToken;
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
+    console.log('Reset token generated and saved');
 
     // Send reset email using SendGrid
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    console.log('Reset URL generated:', resetUrl);
+
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -192,7 +206,7 @@ router.post('/reset-password-request', async (req, res) => {
     `;
 
     try {
-      console.log('Sending reset password email to:', email);
+      console.log('Attempting to send reset password email');
       await sendEmail(user.email, 'Password Reset Request - SpotDraft', emailHtml);
       console.log('Reset password email sent successfully');
       res.json({ 
