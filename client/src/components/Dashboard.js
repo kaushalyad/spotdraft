@@ -269,7 +269,11 @@ const Dashboard = memo(() => {
   const [shareLink, setShareLink] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
-  const [selectedPdfForComment, setSelectedPdfForComment] = useState(null);
+  const [selectedPdfForComment, setSelectedPdfForComment] = useState({
+    _id: null,
+    name: '',
+    comments: []
+  });
   const [commentText, setCommentText] = useState('');
   const [commenting, setCommenting] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
@@ -395,7 +399,7 @@ const Dashboard = memo(() => {
       const comments = await response.json();
       setSelectedPdfForComment({
         ...pdf,
-        comments: comments
+        comments: Array.isArray(comments) ? comments : []
       });
       setCommentDialogOpen(true);
     } catch (error) {
@@ -422,7 +426,12 @@ const Dashboard = memo(() => {
       setCommenting(true);
       const token = localStorage.getItem('token');
       if (!token) {
-        throw new Error('Please login to add comments');
+        setSnackbar({
+          open: true,
+          message: 'Please login to add comments',
+          severity: 'error'
+        });
+        return;
       }
 
       const response = await fetch(`${API_URL}/pdf/${selectedPdfForComment._id}/comments`, {
@@ -432,56 +441,31 @@ const Dashboard = memo(() => {
           'x-auth-token': token
         },
         body: JSON.stringify({
-          content: commentText.trim(),
-          formattedContent: commentText.trim(),
-          page: 1,
-          position: { x: 0, y: 0 }
+          content: commentText.trim()
         })
       });
 
-      const data = await response.json();
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Error adding comment');
       }
 
-      // Update the comments in the selected PDF with the new comment
+      const data = await response.json();
+      
+      // Update the comments in the state
       setSelectedPdfForComment(prev => ({
         ...prev,
-        comments: [...(prev.comments || []), {
-          ...data.comments[data.comments.length - 1],
-          user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email
-          }
-        }]
+        comments: [...(prev.comments || []), data.comment]
       }));
 
-      // Update the comment count in the PDF list
-      setRecentPdfs(prev => prev.map(pdf => 
-        pdf._id === selectedPdfForComment._id
-          ? { 
-              ...pdf, 
-              comments: [...(pdf.comments || []), {
-                ...data.comments[data.comments.length - 1],
-                user: {
-                  _id: user._id,
-                  name: user.name,
-                  email: user.email
-                }
-              }]
-            }
-          : pdf
-      ));
-      
+      setCommentText('');
       setSnackbar({
         open: true,
-        message: 'Comment added successfully',
+        message: data.message || 'Comment added successfully',
         severity: 'success'
       });
-      setCommentText('');
     } catch (error) {
-      console.error('Error adding comment:', error);
+      console.error('Error in handleCommentSubmit:', error);
       setSnackbar({
         open: true,
         message: error.message || 'Error adding comment',
@@ -505,6 +489,15 @@ const Dashboard = memo(() => {
     try {
       setCommenting(true);
       const token = localStorage.getItem('token');
+      if (!token) {
+        setSnackbar({
+          open: true,
+          message: 'Please login to add replies',
+          severity: 'error'
+        });
+        return;
+      }
+
       const response = await fetch(`${API_URL}/pdf/${selectedPdfForComment._id}/comments/${commentId}/replies`, {
         method: 'POST',
         headers: {
@@ -512,76 +505,74 @@ const Dashboard = memo(() => {
           'x-auth-token': token
         },
         body: JSON.stringify({
-          content: replyText.trim(),
-          formattedContent: replyText.trim()
+          content: replyText.trim()
         })
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        // Update the comments in the selected PDF with the new reply
-        setSelectedPdfForComment(prev => ({
-          ...prev,
-          comments: prev.comments.map(comment => 
-            comment._id === commentId 
-              ? { 
-                  ...comment, 
-                  replies: [...(comment.replies || []), {
-                    ...data.comments.find(c => c._id === commentId).replies.slice(-1)[0],
-                    user: {
-                      _id: user._id,
-                      name: user.name,
-                      email: user.email
-                    }
-                  }]
-                }
-              : comment
-          )
-        }));
-
-        // Update the comment count in the PDF list
-        setRecentPdfs(prev => prev.map(pdf => 
-          pdf._id === selectedPdfForComment._id
-            ? {
-                ...pdf,
-                comments: pdf.comments.map(comment =>
-                  comment._id === commentId
-                    ? { 
-                        ...comment, 
-                        replies: [...(comment.replies || []), {
-                          ...data.comments.find(c => c._id === commentId).replies.slice(-1)[0],
-                          user: {
-                            _id: user._id,
-                            name: user.name,
-                            email: user.email
-                          }
-                        }]
-                      }
-                    : comment
-                )
-              }
-            : pdf
-        ));
-
-        setSnackbar({
-          open: true,
-          message: 'Reply added successfully',
-          severity: 'success'
-        });
-        setReplyText('');
-        setReplyTo(null);
-      } else {
-        setSnackbar({
-          open: true,
-          message: data.message || 'Error adding reply',
-          severity: 'error'
-        });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Error adding reply');
       }
-    } catch (error) {
+
+      const data = await response.json();
+      
+      // Update the comments in the state with the new reply
+      setSelectedPdfForComment(prev => ({
+        ...prev,
+        comments: prev.comments.map(comment => {
+          if (comment._id === commentId) {
+            return {
+              ...comment,
+              replies: [...(comment.replies || []), {
+                ...data.reply,
+                user: {
+                  _id: user._id,
+                  name: user.name,
+                  email: user.email
+                }
+              }]
+            };
+          }
+          return comment;
+        })
+      }));
+
+      // Update the comment count in the PDF list
+      setRecentPdfs(prev => prev.map(pdf => 
+        pdf._id === selectedPdfForComment._id
+          ? {
+              ...pdf,
+              comments: pdf.comments.map(comment =>
+                comment._id === commentId
+                  ? { 
+                      ...comment, 
+                      replies: [...(comment.replies || []), {
+                        ...data.reply,
+                        user: {
+                          _id: user._id,
+                          name: user.name,
+                          email: user.email
+                        }
+                      }]
+                    }
+                  : comment
+              )
+            }
+          : pdf
+      ));
+
+      setReplyText('');
+      setReplyTo(null);
       setSnackbar({
         open: true,
-        message: 'Error adding reply',
+        message: 'Reply added successfully',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error in handleReply:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Error adding reply',
         severity: 'error'
       });
     } finally {

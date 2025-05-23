@@ -1672,4 +1672,65 @@ router.post('/:id/grant-access', auth, async (req, res) => {
   }
 });
 
+// Add reply to comment
+router.post('/:id/comments/:commentId/replies', auth, async (req, res) => {
+  try {
+    const { content } = req.body;
+    const pdfId = req.params.id;
+    const commentId = req.params.commentId;
+
+    if (!content) {
+      return res.status(400).json({ message: 'Reply content is required' });
+    }
+
+    const pdf = await PDF.findById(pdfId);
+    if (!pdf) {
+      return res.status(404).json({ message: 'PDF not found' });
+    }
+
+    // Check if user has access to the PDF
+    if (pdf.owner.toString() !== req.user.id && 
+        !pdf.sharedWith.some(share => share.user.toString() === req.user.id)) {
+      return res.status(403).json({ message: 'Not authorized to reply to comments on this PDF' });
+    }
+
+    // Find the comment
+    const comment = pdf.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    // Initialize replies array if it doesn't exist
+    if (!comment.replies) {
+      comment.replies = [];
+    }
+
+    // Create new reply
+    const reply = {
+      user: req.user.id,
+      content,
+      createdAt: new Date()
+    };
+
+    // Add reply to comment
+    comment.replies.push(reply);
+    await pdf.save();
+
+    // Populate user details for the new reply
+    await pdf.populate('comments.replies.user', 'name');
+
+    // Find the newly added reply
+    const updatedComment = pdf.comments.id(commentId);
+    const newReply = updatedComment.replies[updatedComment.replies.length - 1];
+
+    res.status(201).json({
+      message: 'Reply added successfully',
+      reply: newReply
+    });
+  } catch (error) {
+    console.error('Error adding reply:', error);
+    res.status(500).json({ message: 'Error adding reply', error: error.message });
+  }
+});
+
 module.exports = router; 

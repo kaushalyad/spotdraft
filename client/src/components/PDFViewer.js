@@ -440,7 +440,7 @@ export function PDFViewer() {
         page: pageNumber
       });
 
-      const response = await fetch(`${API_URL}/api/pdf/${id}/comments`, {
+      const response = await fetch(`${API_URL}/pdf/${id}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -458,19 +458,19 @@ export function PDFViewer() {
         throw new Error(errorData.message || 'Failed to add comment');
       }
 
-      const updatedPdf = await response.json();
-      console.log('Comment added successfully:', updatedPdf);
+      const data = await response.json();
+      console.log('Comment added successfully:', data);
 
       // Update the PDF state with the new comment
       setPdf(prevPdf => ({
         ...prevPdf,
-        comments: updatedPdf.comments || []
+        comments: [...(prevPdf.comments || []), data.comment]
       }));
 
       setNewComment('');
       setSnackbar({
         open: true,
-        message: 'Comment added successfully',
+        message: data.message || 'Comment added successfully',
         severity: 'success'
       });
     } catch (error) {
@@ -510,7 +510,7 @@ export function PDFViewer() {
         content: newComment
       });
 
-      const response = await fetch(`${API_URL}/api/pdf/${id}/comments/${parentCommentId}/replies`, {
+      const response = await fetch(`${API_URL}/pdf/${id}/comments/${parentCommentId}/replies`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -527,16 +527,31 @@ export function PDFViewer() {
         throw new Error(errorData.message || 'Failed to add reply');
       }
 
-      const updatedPdf = await response.json();
-      console.log('Reply added successfully:', updatedPdf);
+      const data = await response.json();
+      console.log('Reply added successfully:', data);
 
       // Update the PDF state with the new reply
-      setPdf(updatedPdf);
+      setPdf(prevPdf => {
+        const updatedComments = prevPdf.comments.map(comment => {
+          if (comment._id === parentCommentId) {
+            return {
+              ...comment,
+              replies: [...(comment.replies || []), data.reply]
+            };
+          }
+          return comment;
+        });
+        return {
+          ...prevPdf,
+          comments: updatedComments
+        };
+      });
+
       setNewComment('');
       setReplyingTo(null);
       setSnackbar({
         open: true,
-        message: 'Reply added successfully',
+        message: data.message || 'Reply added successfully',
         severity: 'success'
       });
     } catch (error) {
