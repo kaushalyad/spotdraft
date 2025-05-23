@@ -138,7 +138,23 @@ app.use('/api/user', userRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
+  // Serve static files from the React build directory
+  app.use(express.static(path.join(__dirname, '../client/build'), {
+    setHeaders: (res, path) => {
+      // Set proper MIME types for JavaScript files
+      if (path.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
+      }
+      // Set proper MIME types for CSS files
+      if (path.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+      // Set cache headers
+      res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
+    }
+  }));
+
+  // Handle React routing, return all requests to React app
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
   });
