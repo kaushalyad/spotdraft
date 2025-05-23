@@ -21,6 +21,23 @@ const transporter = nodemailer.createTransport({
 // Configure SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+// Helper function to send emails
+const sendEmail = async (to, subject, html) => {
+  try {
+    const msg = {
+      to,
+      from: process.env.EMAIL_FROM || 'noreply@spotdraft.com',
+      subject,
+      html,
+    };
+    await sgMail.send(msg);
+    return true;
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw error;
+  }
+};
+
 // Signup route
 router.post('/signup', async (req, res) => {
   try {
@@ -135,35 +152,33 @@ router.post('/forgot-password', async (req, res) => {
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
 
-    // Send reset email using nodemailer
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
-    const mailOptions = {
-      from: process.env.EMAIL_USER || 'your-email@gmail.com',
-      to: user.email,
-      subject: 'Password Reset Request - SpotDraft',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Password Reset Request</h2>
-          <p>Hello ${user.name},</p>
-          <p>We received a request to reset your password. Click the button below to reset your password:</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetUrl}" 
-               style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-              Reset Password
-            </a>
-          </div>
-          <p>This link will expire in 1 hour.</p>
-          <p>If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
-          <hr style="border: 1px solid #eee; margin: 20px 0;">
-          <p style="color: #666; font-size: 12px;">
-            This is an automated message, please do not reply to this email.
-          </p>
+    // Send reset email using SendGrid
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #333; margin: 0;">SpotDraft</h1>
         </div>
-      `
-    };
+        <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
+        <p style="color: #666; line-height: 1.6;">Hello ${user.name},</p>
+        <p style="color: #666; line-height: 1.6;">We received a request to reset your password. Click the button below to reset your password:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" 
+             style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">
+            Reset Password
+          </a>
+        </div>
+        <p style="color: #666; line-height: 1.6;">This link will expire in 1 hour.</p>
+        <p style="color: #666; line-height: 1.6;">If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
+        <hr style="border: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px; text-align: center;">
+          This is an automated message, please do not reply to this email.
+        </p>
+      </div>
+    `;
 
     try {
-      await transporter.sendMail(mailOptions);
+      await sendEmail(user.email, 'Password Reset Request - SpotDraft', emailHtml);
       res.json({ 
         message: 'Password reset instructions have been sent to your email',
         success: true
@@ -252,6 +267,68 @@ router.get('/verify', async (req, res) => {
   } catch (error) {
     console.error('Error in verify route:', error);
     res.status(500).json({ message: 'Error verifying token', error: error.message });
+  }
+});
+
+// Add reset password request route
+router.post('/reset-password-request', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    // Send reset email
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const emailText = `You are receiving this because you (or someone else) requested a password reset.\n\n
+      Please click on the following link to reset your password:\n\n
+      ${resetUrl}\n\n
+      If you did not request this, please ignore this email and your password will remain unchanged.\n`;
+
+    // TODO: Implement email sending functionality
+    console.log('Reset password email would be sent to:', email);
+    console.log('Reset URL:', resetUrl);
+
+    res.json({ message: 'Password reset email sent' });
+  } catch (error) {
+    console.error('Reset password request error:', error);
+    res.status(500).json({ message: 'Error processing password reset request' });
+  }
+});
+
+// Add reset password route
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Error resetting password' });
   }
 });
 

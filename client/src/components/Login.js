@@ -16,7 +16,8 @@ import {
   Zoom,
   Tooltip,
   useTheme,
-  alpha
+  alpha,
+  Grid
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
@@ -25,6 +26,7 @@ import {
   Lock as LockIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import { Link as RouterLink } from 'react-router-dom';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   marginTop: theme.spacing(8),
@@ -237,45 +239,37 @@ function Login() {
               }}
               sx={{ mb: 2 }}
             />
-            <StyledButton
+            <Button
               type="submit"
               fullWidth
               variant="contained"
-              size="large"
-              sx={{ 
-                mt: 4, 
-                mb: 3,
-                py: 1.5,
-                fontSize: '1.2rem'
-              }}
+              sx={{ mt: 3, mb: 2 }}
               disabled={loading}
             >
-              {loading ? (
-                <CircularProgress size={28} color="inherit" />
-              ) : (
-                'Sign In'
-              )}
-            </StyledButton>
-
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="body1" color="text.secondary">
-                Don't have an account?{' '}
-                <Link 
-                  to="/register" 
-                  style={{ 
-                    color: theme.palette.primary.main, 
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                    fontSize: '1.1rem',
-                    '&:hover': {
-                      textDecoration: 'underline'
-                    }
-                  }}
+              {loading ? <CircularProgress size={24} /> : 'Sign In'}
+            </Button>
+            <Grid container>
+              <Grid item xs>
+                <Link
+                  component={RouterLink}
+                  to="/reset-password"
+                  variant="body2"
+                  sx={{ textDecoration: 'none' }}
                 >
-                  Sign up
+                  Forgot password?
                 </Link>
-              </Typography>
-            </Box>
+              </Grid>
+              <Grid item>
+                <Link
+                  component={RouterLink}
+                  to="/register"
+                  variant="body2"
+                  sx={{ textDecoration: 'none' }}
+                >
+                  {"Don't have an account? Sign Up"}
+                </Link>
+              </Grid>
+            </Grid>
           </Box>
         </StyledPaper>
       </Fade>

@@ -1,53 +1,67 @@
 import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Container,
+  Box,
   Paper,
   Typography,
   TextField,
   Button,
-  Box,
-  Link,
   Alert,
   CircularProgress
 } from '@mui/material';
-import { styled } from '@mui/material/styles';
+import { useNavigate, useParams } from 'react-router-dom';
 import config from '../config';
 
-const StyledPaper = styled(Paper)(({ theme }) => ({
-  marginTop: theme.spacing(8),
-  padding: theme.spacing(4),
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  maxWidth: 400,
-  margin: '0 auto'
-}));
-
 const ResetPassword = () => {
-  const navigate = useNavigate();
-  const { token } = useParams();
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState('');
+  const navigate = useNavigate();
+  const { token } = useParams();
 
-  const handleSubmit = async (e) => {
+  const handleRequestReset = async (e) => {
     e.preventDefault();
-    setError('');
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-
     setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${config.API_URL}/auth/reset-password-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess('Password reset instructions have been sent to your email');
+        setEmail('');
+      } else {
+        setError(data.message || 'Error requesting password reset');
+      }
+    } catch (error) {
+      setError('Error connecting to server');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${config.API_URL}/auth/reset-password`, {
@@ -55,107 +69,125 @@ const ResetPassword = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, newPassword }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess(true);
+        setSuccess('Password has been reset successfully');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
       } else {
-        setError(data.message || 'Failed to reset password');
+        setError(data.message || 'Error resetting password');
       }
-    } catch (err) {
-      setError('An error occurred. Please try again.');
+    } catch (error) {
+      setError('Error connecting to server');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <StyledPaper elevation={3}>
-        <Typography component="h1" variant="h5" gutterBottom>
-          Reset Password
-        </Typography>
-        <Typography variant="body2" color="textSecondary" align="center" sx={{ mb: 3 }}>
-          Enter your new password below.
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+        p: 2
+      }}
+    >
+      <Paper
+        elevation={3}
+        sx={{
+          p: 4,
+          maxWidth: 400,
+          width: '100%',
+          borderRadius: 2
+        }}
+      >
+        <Typography variant="h5" component="h1" gutterBottom align="center">
+          {token ? 'Reset Password' : 'Forgot Password'}
         </Typography>
 
         {error && (
-          <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
 
-        {success ? (
-          <Box sx={{ textAlign: 'center' }}>
-            <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
-              Your password has been reset successfully.
-            </Alert>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => navigate('/login')}
-              sx={{ mt: 2 }}
-            >
-              Go to Login
-            </Button>
-          </Box>
-        ) : (
-          <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
+        {success && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {success}
+          </Alert>
+        )}
+
+        {token ? (
+          <form onSubmit={handleResetPassword}>
             <TextField
-              variant="outlined"
-              margin="normal"
-              required
               fullWidth
-              name="password"
               label="New Password"
               type="password"
-              id="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-            />
-            <TextField
-              variant="outlined"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
               margin="normal"
               required
+            />
+            <TextField
               fullWidth
-              name="confirmPassword"
               label="Confirm Password"
               type="password"
-              id="confirmPassword"
-              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={loading}
+              margin="normal"
+              required
             />
             <Button
-              type="submit"
               fullWidth
               variant="contained"
-              color="primary"
-              sx={{ mt: 3, mb: 2 }}
-              disabled={loading || !password || !confirmPassword}
+              type="submit"
+              disabled={loading}
+              sx={{ mt: 2 }}
             >
               {loading ? <CircularProgress size={24} /> : 'Reset Password'}
             </Button>
-            <Box sx={{ textAlign: 'center' }}>
-              <Link
-                component="button"
-                variant="body2"
-                onClick={() => navigate('/login')}
-                sx={{ mt: 2 }}
-              >
-                Back to Login
-              </Link>
-            </Box>
-          </Box>
+          </form>
+        ) : (
+          <form onSubmit={handleRequestReset}>
+            <TextField
+              fullWidth
+              label="Email Address"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              margin="normal"
+              required
+            />
+            <Button
+              fullWidth
+              variant="contained"
+              type="submit"
+              disabled={loading}
+              sx={{ mt: 2 }}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Send Reset Link'}
+            </Button>
+          </form>
         )}
-      </StyledPaper>
-    </Container>
+
+        <Button
+          fullWidth
+          variant="text"
+          onClick={() => navigate('/login')}
+          sx={{ mt: 2 }}
+        >
+          Back to Login
+        </Button>
+      </Paper>
+    </Box>
   );
 };
 
