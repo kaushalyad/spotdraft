@@ -19,7 +19,6 @@ const App = () => {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/pdf/:id" element={<PDFViewer />} />
-          <Route path="/shared/:token" element={<PDFViewer />} />
           <Route path="/shared/:shareId" element={<SharedPDFViewer />} />
           <Route path="/" element={<Dashboard />} />
         </Routes>

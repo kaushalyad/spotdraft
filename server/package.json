@@ -8,6 +8,8 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/s3-request-presigner": "^3.0.0",
     "@sendgrid/mail": "^8.1.5",
     "aws-sdk": "^2.1354.0",
     "bcrypt": "^5.1.0",

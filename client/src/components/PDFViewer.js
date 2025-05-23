@@ -33,7 +33,8 @@ import {
   Tooltip,
   MenuItem,
   AppBar,
-  Toolbar
+  Toolbar,
+  Checkbox
 } from '@mui/material';
 import { 
   Share as ShareIcon, 
@@ -123,6 +124,7 @@ export function PDFViewer() {
   const [currentSearchIndex, setCurrentSearchIndex] = useState(-1);
   const [isRendering, setIsRendering] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
 
   const onDocumentLoadSuccess = ({ numPages }) => {
     setNumPages(numPages);
@@ -235,7 +237,36 @@ export function PDFViewer() {
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache'
     },
-    withCredentials: true
+    withCredentials: true,
+    onLoadSuccess: ({ numPages }) => {
+      console.log('PDF loaded successfully:', { numPages });
+      setNumPages(numPages);
+      setError(null);
+      setIsLoadingPage(false);
+    },
+    onLoadError: (error) => {
+      console.error('Error loading PDF:', error);
+      setError('Failed to load PDF document. Please try again.');
+      setSnackbar({
+        open: true,
+        message: 'Failed to load PDF document. Please try again.',
+        severity: 'error'
+      });
+      setIsLoadingPage(false);
+    },
+    onSourceSuccess: () => {
+      console.log('PDF source loaded successfully');
+    },
+    onSourceError: (error) => {
+      console.error('Error loading PDF source:', error);
+      setError('Failed to load PDF source. Please try again.');
+      setSnackbar({
+        open: true,
+        message: 'Failed to load PDF source. Please try again.',
+        severity: 'error'
+      });
+      setIsLoadingPage(false);
+    }
   }), [id]);
 
   // Update the PDF options
@@ -252,35 +283,41 @@ export function PDFViewer() {
     verbosity: 0,
     workerSrc: `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`,
     rangeChunkSize: 65536,
-    maxImageSize: 1024 * 1024 * 10
+    maxImageSize: 1024 * 1024 * 10,
+    httpHeaders: {
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'x-auth-token': localStorage.getItem('token') || ''
+    }
   }), []);
 
   // Update the PDF document component
   const PDFDocument = useMemo(() => {
     return (
-    <Document
-      file={fileProps}
-      onLoadSuccess={onDocumentLoadSuccess}
+      <Document
+        file={fileProps}
+        onLoadSuccess={onDocumentLoadSuccess}
         onLoadError={onDocumentLoadError}
-      loading={
+        loading={
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-          <CircularProgress />
-        </Box>
-      }
-      error={
+            <CircularProgress />
+          </Box>
+        }
+        error={
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-          <Typography color="error">Failed to load PDF</Typography>
-        </Box>
-      }
-      options={pdfOptions}
-    >
-      <Page 
-        pageNumber={pageNumber} 
-        scale={scale}
+            <Typography color="error">Failed to load PDF</Typography>
+          </Box>
+        }
+        options={pdfOptions}
+      >
+        <Page 
+          pageNumber={pageNumber} 
+          scale={scale}
           rotate={rotation}
-        renderTextLayer={true}
-        renderAnnotationLayer={true}
+          renderTextLayer={true}
+          renderAnnotationLayer={true}
           onRenderSuccess={() => {
+            console.log('Page rendered successfully:', { pageNumber });
             setIsLoadingPage(false);
             setIsRendering(false);
           }}
@@ -289,13 +326,13 @@ export function PDFViewer() {
             setIsLoadingPage(false);
             setIsRendering(false);
           }}
-        loading={
+          loading={
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
               <CircularProgress />
-          </Box>
-        }
-      />
-    </Document>
+            </Box>
+          }
+        />
+      </Document>
     );
   }, [fileProps, pageNumber, scale, rotation, onDocumentLoadSuccess, onDocumentLoadError, pdfOptions]);
 
@@ -349,93 +386,48 @@ export function PDFViewer() {
   const handleCommentSubmit = async () => {
     if (!newComment.trim()) return;
 
-    // Check if user is authenticated
-    const authToken = localStorage.getItem('token');
-    if (!authToken) {
-      // Store the current comment and URL before redirecting
-      localStorage.setItem('pendingComment', newComment);
-      localStorage.setItem('returnUrl', window.location.pathname);
-      
-      // Redirect to login page
-      navigate('/login', { 
-        state: { 
-          from: window.location.pathname,
-          message: 'Please sign in to add comments'
-        }
-      });
-      return;
-    }
-
     try {
-      // First get the current user info
-      const userResponse = await fetch(`${API_URL}/auth/verify`, {
-        headers: {
-          'x-auth-token': authToken
-        }
-      });
-
-      if (!userResponse.ok) {
-        throw new Error('Failed to verify user');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setSnackbar({
+          open: true,
+          message: 'Please log in to add comments',
+          severity: 'error'
+        });
+        return;
       }
 
-      const user = await userResponse.json();
+      console.log('Adding comment:', {
+        pdfId: id,
+        content: newComment,
+        page: pageNumber
+      });
 
-      // Then add the comment
       const response = await fetch(`${API_URL}/pdf/${id}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-auth-token': authToken
+          'x-auth-token': token
         },
         body: JSON.stringify({
           content: newComment.trim(),
-          formattedContent: newComment.trim(),
           page: pageNumber,
           position: { x: 0, y: 0 }
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to add comment');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add comment');
       }
 
       const updatedPdf = await response.json();
-
-      // Ensure the new comment has user information
-      if (updatedPdf.comments) {
-        const lastComment = updatedPdf.comments[updatedPdf.comments.length - 1];
-        if (lastComment) {
-          lastComment.user = {
-            id: user.id,
-            name: user.name
-          };
-        }
-      }
+      console.log('Comment added successfully:', updatedPdf);
 
       // Update the PDF state with the new comment
       setPdf(prevPdf => ({
         ...prevPdf,
-        comments: updatedPdf.comments.map(comment => {
-          // If this is the new comment, ensure it has user info
-          if (comment._id === updatedPdf.comments[updatedPdf.comments.length - 1]._id) {
-            return {
-              ...comment,
-              user: {
-                id: user.id,
-                name: user.name
-              }
-            };
-          }
-          // For existing comments, preserve their user info
-          return {
-            ...comment,
-            user: comment.user || { name: 'Anonymous' },
-            replies: comment.replies?.map(reply => ({
-              ...reply,
-              user: reply.user || { name: 'Anonymous' }
-            })) || []
-          };
-        })
+        comments: updatedPdf.comments || []
       }));
 
       setNewComment('');
@@ -446,49 +438,13 @@ export function PDFViewer() {
       });
     } catch (error) {
       console.error('Error adding comment:', error);
-      if (error.message === 'Failed to verify user') {
-        // Clear invalid token
-        localStorage.removeItem('token');
-        // Store the current comment and URL before redirecting
-        localStorage.setItem('pendingComment', newComment);
-        localStorage.setItem('returnUrl', window.location.pathname);
-        
-        // Redirect to login page
-        navigate('/login', { 
-          state: { 
-            from: window.location.pathname,
-            message: 'Your session has expired. Please sign in again.'
-          }
-        });
-      } else {
-        setSnackbar({
-          open: true,
-          message: error.message || 'Error adding comment',
-          severity: 'error'
-        });
-      }
+      setSnackbar({
+        open: true,
+        message: error.message || 'Error adding comment',
+        severity: 'error'
+      });
     }
   };
-
-  // Add useEffect to handle pending comments after login
-  useEffect(() => {
-    const pendingComment = localStorage.getItem('pendingComment');
-    const returnUrl = localStorage.getItem('returnUrl');
-    
-    if (pendingComment && localStorage.getItem('token')) {
-      setNewComment(pendingComment);
-      localStorage.removeItem('pendingComment');
-      localStorage.removeItem('returnUrl');
-      
-      // If we're not on the return URL, navigate to it
-      if (returnUrl && window.location.pathname !== returnUrl) {
-        navigate(returnUrl);
-      } else {
-        // Automatically trigger comment submission
-        handleCommentSubmit();
-      }
-    }
-  }, [localStorage.getItem('token')]);
 
   const handleReply = async (parentCommentId) => {
     if (!newComment.trim()) {
@@ -511,20 +467,12 @@ export function PDFViewer() {
         return;
       }
 
-      // First get the current user info
-      const userResponse = await fetch(`${API_URL}/auth/verify`, {
-        headers: {
-          'x-auth-token': token
-        }
+      console.log('Adding reply:', {
+        pdfId: id,
+        commentId: parentCommentId,
+        content: newComment
       });
 
-      if (!userResponse.ok) {
-        throw new Error('Failed to verify user');
-      }
-
-      const user = await userResponse.json();
-
-      // Then add the reply
       const response = await fetch(`${API_URL}/pdf/${id}/comments/${parentCommentId}/replies`, {
         method: 'POST',
         headers: {
@@ -538,25 +486,14 @@ export function PDFViewer() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to add reply');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add reply');
       }
 
       const updatedPdf = await response.json();
+      console.log('Reply added successfully:', updatedPdf);
 
-      // Ensure the new reply has user information
-      if (updatedPdf.comments) {
-        const parentComment = updatedPdf.comments.find(c => c._id === parentCommentId);
-        if (parentComment && parentComment.replies) {
-          const lastReply = parentComment.replies[parentComment.replies.length - 1];
-          if (lastReply && !lastReply.user) {
-            lastReply.user = {
-              id: user.id,
-              name: user.name
-            };
-          }
-        }
-      }
-
+      // Update the PDF state with the new reply
       setPdf(updatedPdf);
       setNewComment('');
       setReplyingTo(null);
@@ -566,28 +503,105 @@ export function PDFViewer() {
         severity: 'success'
       });
     } catch (error) {
-      console.error('Error in handleReply:', error);
-      if (error.message === 'Failed to verify user') {
-        // Clear invalid token
-        localStorage.removeItem('token');
-        // Store the current comment and URL before redirecting
-        localStorage.setItem('pendingComment', newComment);
-        localStorage.setItem('returnUrl', window.location.pathname);
-        
-        // Redirect to login page
-        navigate('/login', { 
-          state: { 
-            from: window.location.pathname,
-            message: 'Your session has expired. Please sign in again.'
-          }
-        });
-      } else {
+      console.error('Error adding reply:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Error adding reply',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleShareClick = () => {
+    setShowEmailDialog(true);
+  };
+
+  const handleEmailSubmit = async () => {
+    if (!shareEmail.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter an email address',
+        severity: 'error'
+      });
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(shareEmail)) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter a valid email address',
+        severity: 'error'
+      });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
         setSnackbar({
           open: true,
-          message: error.message || 'Error adding reply',
+          message: 'Please log in to share PDFs',
           severity: 'error'
         });
+        return;
       }
+
+      // Grant access and generate share link in one request
+      const response = await fetch(`${API_URL}/pdf/${id}/grant-access`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': token
+        },
+        body: JSON.stringify({ 
+          email: shareEmail,
+          permissions: {
+            canView: true,
+            canComment: true,
+            canDownload: true
+          },
+          shareSettings: {
+            shareType: 'public',
+            linkExpiry: '7d',
+            allowDownload: true,
+            allowComments: true,
+            notifyOnAccess: true
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to grant access');
+      }
+
+      const data = await response.json();
+      console.log('Access granted and link generated:', data);
+
+      // Generate the full share URL using production URL
+      const shareUrl = `https://spotdraft-w59a.onrender.com/shared/${data.token}`;
+      setShareLink(shareUrl);
+
+      // Close email dialog and show success message with copy option
+      setShowEmailDialog(false);
+      
+      // Show the share link dialog
+      setShowShareDialog(true);
+
+      setSnackbar({
+        open: true,
+        message: `Access granted to ${shareEmail} and share link generated`,
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error granting access:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Error granting access',
+        severity: 'error'
+      });
     }
   };
 
@@ -599,26 +613,82 @@ export function PDFViewer() {
       }
 
       const token = localStorage.getItem('token');
-      const response = await axios.post(
-        `${API_URL}/pdf/share/${pdf._id}`, 
-        shareSettings,
-        {
-          headers: {
-            'x-auth-token': token
+      if (!token) {
+        setSnackbar({
+          open: true,
+          message: 'Please log in to share PDFs',
+          severity: 'error'
+        });
+        return;
+      }
+
+      console.log('Generating share link for PDF:', id);
+      console.log('Share settings:', shareSettings);
+
+      const response = await fetch(`${API_URL}/pdf/${id}/share`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': token
+        },
+        body: JSON.stringify({
+          ...shareSettings,
+          recipientEmail: shareEmail,
+          permissions: {
+            canView: true,
+            canComment: shareSettings.allowComments,
+            canDownload: shareSettings.allowDownload
           }
-        }
-      );
-      setShareLink(response.data.shareLink);
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate share link');
+      }
+
+      const data = await response.json();
+      console.log('Share link generated:', data);
+
+      // Generate the full share URL using production URL
+      const shareUrl = `https://spotdraft-w59a.onrender.com/shared/${data.token}`;
+      setShareLink(shareUrl);
       setShowShareDialog(true);
-    } catch (error) {
-      console.error('Error sharing PDF:', error);
-      setError('Error sharing PDF');
+
       setSnackbar({
         open: true,
-        message: error.response?.data?.message || 'Error sharing PDF',
+        message: 'Share link generated and access granted successfully',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error generating share link:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Error generating share link',
         severity: 'error'
       });
     }
+  };
+
+  const copyShareLink = () => {
+    if (!shareLink) return;
+
+    navigator.clipboard.writeText(shareLink)
+      .then(() => {
+        setSnackbar({
+          open: true,
+          message: 'Share link copied to clipboard',
+          severity: 'success'
+        });
+      })
+      .catch((error) => {
+        console.error('Error copying to clipboard:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to copy share link',
+          severity: 'error'
+        });
+      });
   };
 
   const handlePasswordSubmit = async () => {
@@ -668,15 +738,6 @@ export function PDFViewer() {
         severity: 'error'
       });
     }
-  };
-
-  const copyShareLink = () => {
-    navigator.clipboard.writeText(shareLink);
-    setSnackbar({
-      open: true,
-      message: 'Share link copied to clipboard',
-      severity: 'success'
-    });
   };
 
   const toggleReplies = (commentId) => {
@@ -1169,36 +1230,57 @@ export function PDFViewer() {
     }
   };
 
-  // Add useEffect to update view count
+  // Add useEffect to update view count with debounce
   useEffect(() => {
+    let timeoutId;
+    let isViewCounted = false;
+
     const updateViewCount = async () => {
-      if (!pdf || !id) return;
+      if (!pdf || !id || isViewCounted) return;
 
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch(`${API_URL}/pdf/${id}/view`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-auth-token': token
-          }
-        });
-
-        if (response.ok) {
-          const updatedPdf = await response.json();
-          setPdf(prevPdf => ({
-            ...prevPdf,
-            views: updatedPdf.views
-          }));
+        // Clear any existing timeout
+        if (timeoutId) {
+          clearTimeout(timeoutId);
         }
+
+        // Set a new timeout
+        timeoutId = setTimeout(async () => {
+          if (isViewCounted) return; // Double check to prevent multiple calls
+          
+          const response = await fetch(`${API_URL}/pdf/${id}/view`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-auth-token': token
+            }
+          });
+
+          if (response.ok) {
+            isViewCounted = true; // Mark as counted
+            const updatedPdf = await response.json();
+            setPdf(prevPdf => ({
+              ...prevPdf,
+              views: updatedPdf.views
+            }));
+          }
+        }, 2000); // 2 second debounce
       } catch (error) {
         console.error('Error updating view count:', error);
       }
     };
 
     updateViewCount();
+
+    // Cleanup function
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [id, pdf]);
 
   // Add cleanup effect
@@ -1391,7 +1473,7 @@ export function PDFViewer() {
               </IconButton>
             </Tooltip>
             <Tooltip title="Share">
-              <IconButton onClick={() => setShowShareDialog(true)} size="small">
+              <IconButton onClick={handleShareClick} size="small">
                 <ShareIcon />
               </IconButton>
             </Tooltip>
@@ -1400,7 +1482,7 @@ export function PDFViewer() {
                 <Badge 
                   badgeContent={calculateTotalComments(pdf?.comments || [])} 
                   color="primary"
-            sx={{ 
+                  sx={{ 
                     '& .MuiBadge-badge': {
                       fontSize: '0.75rem',
                       height: '20px',
@@ -1647,214 +1729,163 @@ export function PDFViewer() {
         </Alert>
       </Snackbar>
 
-      <Dialog open={openShareDialog} onClose={() => setOpenShareDialog(false)} maxWidth="sm" fullWidth>
+      {/* Email Dialog */}
+      <Dialog 
+        open={showEmailDialog} 
+        onClose={() => setShowEmailDialog(false)}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ShareIcon />
-            Share PDF
+            <PersonIcon />
+            Grant Access
           </Box>
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Choose Sharing Type
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Enter the email address to grant access to this PDF. A share link will be generated automatically.
             </Typography>
-            <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-              <Button
-                variant={shareSettings.shareType === 'public' ? 'contained' : 'outlined'}
-                onClick={() => {
-                  setShareSettings(prev => ({ ...prev, shareType: 'public', password: '' }));
-                  setShareLink(''); // Clear existing link when changing type
-                }}
-                startIcon={<PublicIcon />}
-                sx={{ flex: 1 }}
-              >
-                Public Link
-              </Button>
-              <Button
-                variant={shareSettings.shareType === 'password' ? 'contained' : 'outlined'}
-                onClick={() => {
-                  setShareSettings(prev => ({ ...prev, shareType: 'password' }));
-                  setShareLink(''); // Clear existing link when changing type
-                }}
-                startIcon={<LockIcon />}
-                sx={{ flex: 1 }}
-              >
-                Password Protected
-              </Button>
-            </Box>
-
-            {shareSettings.shareType === 'public' && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Anyone with the link can access this PDF
-              </Alert>
-            )}
-
-            {shareSettings.shareType === 'password' && (
-              <>
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                  This link will require a password to access
-                </Alert>
-                <TextField
-                  fullWidth
-                  label="Password"
-                  type="password"
-                  value={shareSettings.password}
-                  onChange={(e) => {
-                    setShareSettings(prev => ({ ...prev, password: e.target.value }));
-                    setShareLink(''); // Clear existing link when changing password
-                  }}
-                  sx={{ mb: 2 }}
-                  helperText="Set a password to protect the PDF"
-                  required
-                  error={!shareSettings.password}
-                />
-              </>
-            )}
-
             <TextField
-              select
               fullWidth
-              label="Link Expiry"
-              value={shareSettings.linkExpiry}
-              onChange={(e) => setShareSettings(prev => ({ ...prev, linkExpiry: e.target.value }))}
-              sx={{ mb: 2 }}
-              helperText="Choose how long the share link should be valid"
-            >
-              <MenuItem value="1d">1 Day</MenuItem>
-              <MenuItem value="7d">7 Days</MenuItem>
-              <MenuItem value="30d">30 Days</MenuItem>
-              <MenuItem value="never">Never</MenuItem>
-            </TextField>
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={shareSettings.allowDownload}
-                  onChange={(e) => setShareSettings(prev => ({ ...prev, allowDownload: e.target.checked }))}
-                />
-              }
-              label="Allow Download"
-              sx={{ mb: 1 }}
+              label="Email Address"
+              type="email"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              placeholder="Enter email address"
+              sx={{ mt: 2 }}
+              autoFocus
             />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={shareSettings.allowComments}
-                  onChange={(e) => setShareSettings(prev => ({ ...prev, allowComments: e.target.checked }))}
-                />
-              }
-              label="Allow Comments"
-              sx={{ mb: 1 }}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={shareSettings.notifyOnAccess}
-                  onChange={(e) => setShareSettings(prev => ({ ...prev, notifyOnAccess: e.target.checked }))}
-                />
-              }
-              label="Notify me when someone accesses the PDF"
-              sx={{ mb: 1 }}
-            />
-          </Box>
-
-          {shareLink && (
-            <Box sx={{ mt: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+            <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle2" gutterBottom>
-                {shareSettings.shareType === 'password' ? 'Password Protected Share Link' : 'Public Share Link'}
+                Access Permissions:
               </Typography>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 1,
-                bgcolor: 'background.paper',
-                p: 1,
-                borderRadius: 1,
-                border: '1px solid',
-                borderColor: 'divider'
-              }}>
-                <Typography
-                  sx={{
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  {shareLink}
-                </Typography>
-                <IconButton 
-                  onClick={copyShareLink} 
-                  size="small"
-                  sx={{ 
-                    color: 'primary.main',
-                    '&:hover': {
-                      bgcolor: 'primary.light',
-                      color: 'primary.contrastText'
-                    }
-                  }}
-                >
-                  <CopyIcon />
-                </IconButton>
-              </Box>
-              <Box sx={{ mt: 1 }}>
-                {shareSettings.shareType === 'password' && (
-                  <Chip
-                    icon={<LockIcon />}
-                    label="Password Protected"
-                    size="small"
-                    color="warning"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.shareType === 'public' && (
-                  <Chip
-                    icon={<PublicIcon />}
-                    label="Public Access"
-                    size="small"
-                    color="success"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.linkExpiry !== 'never' && (
-                  <Chip
-                    icon={<AccessTimeIcon />}
-                    label={`Expires in ${shareSettings.linkExpiry}`}
-                    size="small"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.allowDownload && (
-                  <Chip
-                    icon={<DownloadIcon />}
-                    label="Download Allowed"
-                    size="small"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
-                {shareSettings.allowComments && (
-                  <Chip
-                    icon={<CommentIcon />}
-                    label="Comments Allowed"
-                    size="small"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                )}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <FormControlLabel
+                  control={<Checkbox checked={true} disabled />}
+                  label="View PDF"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={true} disabled />}
+                  label="Add Comments"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={true} disabled />}
+                  label="Download PDF"
+                />
               </Box>
             </Box>
-          )}
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenShareDialog(false)}>Cancel</Button>
+          <Button onClick={() => setShowEmailDialog(false)}>Cancel</Button>
           <Button
-            onClick={handleShare}
+            onClick={handleEmailSubmit}
             variant="contained"
-            disabled={shareSettings.shareType === 'password' && !shareSettings.password}
+            disabled={!shareEmail.trim()}
             startIcon={<ShareIcon />}
           >
-            Generate {shareSettings.shareType === 'password' ? 'Protected' : 'Public'} Link
+            Grant Access & Generate Link
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Share Link Dialog */}
+      <Dialog 
+        open={showShareDialog} 
+        onClose={() => setShowShareDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ShareIcon />
+            Share Link Generated
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Access has been granted to {shareEmail}. Share this link to provide access:
+            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 1,
+              bgcolor: 'background.paper',
+              p: 1,
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              mt: 2
+            }}>
+              <Typography
+                sx={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: '0.875rem'
+                }}
+              >
+                {shareLink}
+              </Typography>
+              <IconButton 
+                onClick={copyShareLink} 
+                size="small"
+                sx={{ 
+                  color: 'primary.main',
+                  '&:hover': {
+                    bgcolor: 'primary.light',
+                    color: 'primary.contrastText'
+                  }
+                }}
+              >
+                <CopyIcon />
+              </IconButton>
+            </Box>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Access Details:
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                <Chip
+                  icon={<PersonIcon />}
+                  label={`Recipient: ${shareEmail}`}
+                  size="small"
+                  sx={{ mr: 1, mb: 1 }}
+                />
+                <Chip
+                  icon={<AccessTimeIcon />}
+                  label="Expires in 7 days"
+                  size="small"
+                  sx={{ mr: 1, mb: 1 }}
+                />
+                <Chip
+                  icon={<DownloadIcon />}
+                  label="Download Allowed"
+                  size="small"
+                  sx={{ mr: 1, mb: 1 }}
+                />
+                <Chip
+                  icon={<CommentIcon />}
+                  label="Comments Allowed"
+                  size="small"
+                  sx={{ mr: 1, mb: 1 }}
+                />
+              </Box>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowShareDialog(false)}>Close</Button>
+          <Button
+            onClick={copyShareLink}
+            variant="contained"
+            startIcon={<CopyIcon />}
+          >
+            Copy Link
           </Button>
         </DialogActions>
       </Dialog>

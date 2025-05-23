@@ -77,8 +77,11 @@ const PDFSchema = new mongoose.Schema({
   comments: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+      ref: 'User'
+    },
+    guestInfo: {
+      name: String,
+      email: String
     },
     content: {
       type: String,
@@ -105,8 +108,11 @@ const PDFSchema = new mongoose.Schema({
     replies: [{
       user: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+        ref: 'User'
+      },
+      guestInfo: {
+        name: String,
+        email: String
       },
       content: {
         type: String,
@@ -136,9 +142,8 @@ const PDFSchema = new mongoose.Schema({
 // Add indexes for better query performance
 PDFSchema.index({ owner: 1 });
 PDFSchema.index({ shareToken: 1 });
-PDFSchema.index({ 'sharedWith.user': 1 });
-PDFSchema.index({ 'shareSettings.expiresAt': 1 });
-PDFSchema.index({ createdAt: -1 });
+PDFSchema.index({ 'comments.createdAt': -1 });
+PDFSchema.index({ 'comments.replies.createdAt': -1 });
 
 // Add method to increment views
 PDFSchema.methods.incrementViews = async function() {

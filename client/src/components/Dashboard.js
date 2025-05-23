@@ -44,7 +44,8 @@ import {
   Switch,
   Snackbar,
   Alert,
-  Link
+  Link,
+  Checkbox
 } from '@mui/material';
 import {
   PictureAsPdf as PdfIcon,
@@ -76,7 +77,9 @@ import {
   MoreVert as MoreVertIcon,
   ContentCopy as CopyIcon,
   Refresh as RefreshIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  AccessTime as AccessTimeIcon,
+  Reply as ReplyIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { debounce } from 'lodash';
@@ -85,6 +88,7 @@ import config from '../config';
 import Analytics from './Analytics';
 import Settings from './Settings';
 import { useSettings } from '../contexts/SettingsContext';
+import PDFViewer from './PDFViewer';
 
 // Add API URL constant
 const API_URL = config.API_URL;
@@ -250,6 +254,15 @@ const Dashboard = memo(() => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [error, setError] = useState(null);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [shareSettings, setShareSettings] = useState({
+    linkExpiry: '7d',
+    allowDownload: true,
+    allowComments: true,
+    notifyOnAccess: true
+  });
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
 
   // Add language change effect
   useEffect(() => {
@@ -326,42 +339,49 @@ const Dashboard = memo(() => {
 
   // Add new function to handle search result click
   const handleSearchResultClick = (pdf) => {
-    handlePdfClick(pdf._id);
+    handlePdfClick(pdf);
     setSearchQuery('');
     setSearchResults([]);
   };
 
-  const handleCommentClick = (pdf, e) => {
+  const handleCommentClick = async (pdf, e) => {
     e.stopPropagation();
-    // Fetch the PDF with comments before opening the dialog
-    const fetchPdfWithComments = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/pdf/${pdf._id}`, {
-          headers: {
-            'x-auth-token': token
-          }
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setSelectedPdfForComment(data);
-          setCommentDialogOpen(true);
-        } else {
-          setSnackbar({
-            open: true,
-            message: data.message || 'Error fetching PDF comments',
-            severity: 'error'
-          });
-        }
-      } catch (error) {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
         setSnackbar({
           open: true,
-          message: 'Error fetching PDF comments',
+          message: 'Please login to view comments',
           severity: 'error'
         });
+        return;
       }
-    };
-    fetchPdfWithComments();
+
+      const response = await fetch(`${API_URL}/pdf/${pdf._id}/comments`, {
+        headers: {
+          'x-auth-token': token
+        }
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Error fetching comments');
+      }
+
+      const comments = await response.json();
+      setSelectedPdfForComment({
+        ...pdf,
+        comments: comments
+      });
+      setCommentDialogOpen(true);
+    } catch (error) {
+      console.error('Error in handleCommentClick:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Error fetching comments',
+        severity: 'error'
+      });
+    }
   };
 
   const handleCommentSubmit = async () => {
@@ -774,55 +794,96 @@ const Dashboard = memo(() => {
     }
   };
 
-  const handleShare = async (pdfId) => {
+  const handleShareClick = (e, pdfId) => {
+    e.stopPropagation();
+    setSelectedPdf({ _id: pdfId });
+    setShowEmailDialog(true);
+  };
+
+  const handleEmailSubmit = async () => {
+    if (!shareEmail.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter an email address',
+        severity: 'error'
+      });
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(shareEmail)) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter a valid email address',
+        severity: 'error'
+      });
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        throw new Error('No authentication token found');
+        setSnackbar({
+          open: true,
+          message: 'Please log in to share PDFs',
+          severity: 'error'
+        });
+        return;
       }
 
-      const response = await fetch(`${API_URL}/pdf/share/${pdfId}`, {
+      // Grant access and generate share link in one request
+      const response = await fetch(`${API_URL}/pdf/${selectedPdf._id}/grant-access`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-auth-token': token
         },
-        body: JSON.stringify({
+        body: JSON.stringify({ 
           email: shareEmail,
-          isPublic: isPublic
+          permissions: {
+            canView: true,
+            canComment: true,
+            canDownload: true
+          },
+          shareSettings: {
+            shareType: 'public',
+            linkExpiry: '7d',
+            allowDownload: true,
+            allowComments: true,
+            notifyOnAccess: true
+          }
         })
       });
 
-      const data = await response.json();
-      
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to share PDF');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to grant access');
       }
 
-      if (isPublic) {
-        // Use the shareLink from the server response if available
-        const shareLink = data.shareLink || `${window.location.origin}/shared/${data.shareToken}`;
-        setShareLink(shareLink);
-        setSnackbar({
-          open: true,
-          message: 'Share link generated successfully',
-          severity: 'success'
-        });
-      } else {
-        setSnackbar({
-          open: true,
-          message: 'PDF shared successfully with ' + shareEmail,
-          severity: 'success'
-        });
-      }
-      setOpenShareDialog(false);
-      setShareEmail('');
-      setIsPublic(false);
-    } catch (error) {
-      console.error('Error sharing PDF:', error);
+      const data = await response.json();
+      console.log('Access granted and link generated:', data);
+
+      // Generate the full share URL using frontend URL from config
+      const shareUrl = `${config.FRONTEND_URL}/shared/${data.token}`;
+      setShareLink(shareUrl);
+
+      // Close email dialog and show success message with copy option
+      setShowEmailDialog(false);
+      
+      // Show the share link dialog
+      setShowShareDialog(true);
+
       setSnackbar({
         open: true,
-        message: error.message || 'Error sharing PDF',
+        message: `Access granted to ${shareEmail} and share link generated`,
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error granting access:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Error granting access',
         severity: 'error'
       });
     }
@@ -910,13 +971,8 @@ const Dashboard = memo(() => {
     navigate('/search');
   };
 
-  const handlePdfClick = (pdfId) => {
-    navigate(`/pdf/${pdfId}`);
-  };
-
-  const handleShareClick = (e, pdfId) => {
-    e.stopPropagation();
-    navigate(`/share/${pdfId}`);
+  const handlePdfClick = (pdf) => {
+    navigate(`/pdf/${pdf._id}`);
   };
 
   // Add click outside handler to close search results
@@ -1458,7 +1514,7 @@ const Dashboard = memo(() => {
                                 },
                                 cursor: 'pointer'
                               }}
-                              onClick={() => handlePdfClick(pdf._id)}
+                              onClick={() => handlePdfClick(pdf)}
                             >
                               <ListItemAvatar>
                                 <Avatar sx={{ bgcolor: 'primary.main' }}>
@@ -1634,7 +1690,7 @@ const Dashboard = memo(() => {
                           },
                           cursor: 'pointer'
                         }}
-                        onClick={() => handlePdfClick(pdf._id)}
+                        onClick={() => handlePdfClick(pdf)}
                       >
                         <ListItemAvatar>
                           <Avatar sx={{ bgcolor: 'primary.main' }}>
@@ -1975,57 +2031,163 @@ const Dashboard = memo(() => {
           </DialogActions>
         </Dialog>
 
-        {/* Share Dialog */}
-        <Dialog
-          open={openShareDialog}
-          onClose={() => setOpenShareDialog(false)}
-          maxWidth="sm"
+        {/* Email Dialog */}
+        <Dialog 
+          open={showEmailDialog} 
+          onClose={() => setShowEmailDialog(false)}
+          maxWidth="xs"
           fullWidth
         >
-          <DialogTitle>{t('sharePDF')}</DialogTitle>
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PersonIcon />
+              Grant Access
+            </Box>
+          </DialogTitle>
           <DialogContent>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                />
-              }
-              label={t('makePublic')}
-              sx={{ mb: 2 }}
-            />
-            {!isPublic && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Enter the email address to grant access to this PDF. A share link will be generated automatically.
+              </Typography>
               <TextField
                 fullWidth
-                label={t('email')}
+                label="Email Address"
                 type="email"
                 value={shareEmail}
                 onChange={(e) => setShareEmail(e.target.value)}
-                sx={{ mb: 2 }}
+                placeholder="Enter email address"
+                sx={{ mt: 2 }}
+                autoFocus
               />
-            )}
-            {shareLink && (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2">{t('shareLink')}:</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Link href={shareLink} target="_blank" rel="noopener">
-                    {shareLink}
-                  </Link>
-                  <IconButton onClick={copyShareLink} size="small">
-                    <CopyIcon />
-                  </IconButton>
+                <Typography variant="subtitle2" gutterBottom>
+                  Access Permissions:
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <FormControlLabel
+                    control={<Checkbox checked={true} disabled />}
+                    label="View PDF"
+                  />
+                  <FormControlLabel
+                    control={<Checkbox checked={true} disabled />}
+                    label="Add Comments"
+                  />
+                  <FormControlLabel
+                    control={<Checkbox checked={true} disabled />}
+                    label="Download PDF"
+                  />
                 </Box>
               </Box>
-            )}
+            </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setOpenShareDialog(false)}>{t('cancel')}</Button>
+            <Button onClick={() => setShowEmailDialog(false)}>Cancel</Button>
             <Button
-              onClick={() => handleShare(selectedPdf._id)}
+              onClick={handleEmailSubmit}
               variant="contained"
-              disabled={!isPublic && !shareEmail}
+              disabled={!shareEmail.trim()}
+              startIcon={<ShareIcon />}
             >
-              {t('share')}
+              Grant Access & Generate Link
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Share Link Dialog */}
+        <Dialog 
+          open={showShareDialog} 
+          onClose={() => setShowShareDialog(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ShareIcon />
+              Share Link Generated
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Access has been granted to {shareEmail}. Share this link to provide access:
+              </Typography>
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 1,
+                bgcolor: 'background.paper',
+                p: 1,
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: 'divider',
+                mt: 2
+              }}>
+                <Typography
+                  sx={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {shareLink}
+                </Typography>
+                <IconButton 
+                  onClick={copyShareLink} 
+                  size="small"
+                  sx={{ 
+                    color: 'primary.main',
+                    '&:hover': {
+                      bgcolor: 'primary.light',
+                      color: 'primary.contrastText'
+                    }
+                  }}
+                >
+                  <CopyIcon />
+                </IconButton>
+              </Box>
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Access Details:
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  <Chip
+                    icon={<PersonIcon />}
+                    label={`Recipient: ${shareEmail}`}
+                    size="small"
+                    sx={{ mr: 1, mb: 1 }}
+                  />
+                  <Chip
+                    icon={<AccessTimeIcon />}
+                    label="Expires in 7 days"
+                    size="small"
+                    sx={{ mr: 1, mb: 1 }}
+                  />
+                  <Chip
+                    icon={<DownloadIcon />}
+                    label="Download Allowed"
+                    size="small"
+                    sx={{ mr: 1, mb: 1 }}
+                  />
+                  <Chip
+                    icon={<CommentIcon />}
+                    label="Comments Allowed"
+                    size="small"
+                    sx={{ mr: 1, mb: 1 }}
+                  />
+                </Box>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowShareDialog(false)}>Close</Button>
+            <Button
+              onClick={copyShareLink}
+              variant="contained"
+              startIcon={<CopyIcon />}
+            >
+              Copy Link
             </Button>
           </DialogActions>
         </Dialog>
@@ -2033,34 +2195,42 @@ const Dashboard = memo(() => {
         {/* Comment Dialog */}
         <Dialog
           open={commentDialogOpen}
-          onClose={() => {
-            setCommentDialogOpen(false);
-            setReplyTo(null);
-            setReplyText('');
-          }}
-          maxWidth="md"
+          onClose={() => setCommentDialogOpen(false)}
+          maxWidth="sm"
           fullWidth
+          PaperProps={{
+            sx: {
+              height: '80vh',
+              maxHeight: '80vh',
+              width: '500px',
+              maxWidth: '500px',
+              margin: 'auto',
+              borderRadius: 2
+            }
+          }}
         >
-          <DialogTitle>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6">
-                {t('comments')}
-              </Typography>
-              {selectedPdfForComment && (
-                <Typography variant="subtitle1" color="text.secondary">
-                  {selectedPdfForComment.name}
-                </Typography>
-              )}
-            </Box>
+          <DialogTitle sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <Typography variant="h6">
+              Comments ({calculateTotalComments(selectedPdfForComment?.comments || [])})
+            </Typography>
+            <IconButton 
+              onClick={() => setCommentDialogOpen(false)}
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
           </DialogTitle>
-          <DialogContent>
-            {/* Comment Input */}
-            <Box sx={{ mb: 3 }}>
+          <DialogContent dividers>
+            <Box sx={{ mb: 2 }}>
               <TextField
                 fullWidth
                 multiline
                 rows={3}
-                label={t('addComment')}
+                placeholder="Add a comment..."
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 sx={{ mb: 1 }}
@@ -2068,116 +2238,110 @@ const Dashboard = memo(() => {
               <Button
                 variant="contained"
                 onClick={handleCommentSubmit}
-                disabled={commenting || !commentText.trim()}
-                sx={{ float: 'right' }}
+                disabled={!commentText.trim() || commenting}
+                fullWidth
               >
-                {commenting ? t('addingComment') : t('addComment')}
+                {commenting ? 'Posting...' : 'Add Comment'}
               </Button>
             </Box>
-
-            <Divider sx={{ my: 2 }} />
-
-            {/* Comments List */}
             <List>
               {selectedPdfForComment?.comments?.map((comment) => (
                 <React.Fragment key={comment._id}>
                   <ListItem alignItems="flex-start">
                     <ListItemAvatar>
-                      <Avatar sx={{ bgcolor: 'primary.main' }}>
-                        {comment.user?.name?.[0]?.toUpperCase() || 'A'}
+                      <Avatar>
+                        {comment.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                       </Avatar>
                     </ListItemAvatar>
-                    <Box sx={{ flex: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <Typography component="span" variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    <ListItemText
+                      primary={
+                        <Typography variant="subtitle2">
                           {comment.user?.name || 'Anonymous'}
                         </Typography>
-                        <Typography component="span" variant="caption" color="text.secondary">
-                          {formatDateTime(comment.createdAt)}
-                        </Typography>
-                      </Box>
-                      <Typography component="div" variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
-                        {comment.content}
-                      </Typography>
-                      <Button
-                        size="small"
-                        onClick={() => setReplyTo(comment._id)}
-                      >
-                        {t('reply')}
-                      </Button>
-                    </Box>
+                      }
+                      secondary={
+                        <>
+                          <Typography variant="body2" color="text.primary" sx={{ mb: 1 }}>
+                            {comment.content}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(comment.createdAt).toLocaleString()}
+                          </Typography>
+                          <Box sx={{ mt: 1 }}>
+                            <Button
+                              size="small"
+                              startIcon={<ReplyIcon />}
+                              onClick={() => setReplyTo(comment._id)}
+                            >
+                              Reply
+                            </Button>
+                          </Box>
+                          {replyTo === comment._id && (
+                            <Box sx={{ mt: 1 }}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                placeholder="Write a reply..."
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                sx={{ mb: 1 }}
+                              />
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() => handleReply(comment._id)}
+                                  disabled={!replyText.trim() || commenting}
+                                >
+                                  {commenting ? 'Posting...' : 'Reply'}
+                                </Button>
+                                <Button
+                                  size="small"
+                                  onClick={() => {
+                                    setReplyTo(null);
+                                    setReplyText('');
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </Box>
+                            </Box>
+                          )}
+                        </>
+                      }
+                    />
                   </ListItem>
-
-                  {/* Replies */}
                   {comment.replies?.map((reply) => (
                     <ListItem key={reply._id} sx={{ pl: 9 }}>
                       <ListItemAvatar>
-                        <Avatar sx={{ width: 24, height: 24, bgcolor: 'secondary.main' }}>
-                          {reply.user?.name?.[0]?.toUpperCase() || 'A'}
+                        <Avatar sx={{ width: 24, height: 24 }}>
+                          {reply.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                         </Avatar>
                       </ListItemAvatar>
-                      <Box sx={{ flex: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography component="span" variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      <ListItemText
+                        primary={
+                          <Typography variant="subtitle2">
                             {reply.user?.name || 'Anonymous'}
                           </Typography>
-                          <Typography component="span" variant="caption" color="text.secondary">
-                            {formatDateTime(reply.createdAt)}
-                          </Typography>
-                        </Box>
-                        <Typography component="div" variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap' }}>
-                          {reply.content}
-                        </Typography>
-                      </Box>
+                        }
+                        secondary={
+                          <>
+                            <Typography variant="body2" color="text.primary">
+                              {reply.content}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(reply.createdAt).toLocaleString()}
+                            </Typography>
+                          </>
+                        }
+                      />
                     </ListItem>
                   ))}
-
-                  {/* Reply Input */}
-                  {replyTo === comment._id && (
-                    <Box sx={{ pl: 9, pr: 2, py: 1 }}>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        multiline
-                        rows={2}
-                        placeholder={t('writeReply')}
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        sx={{ mb: 1 }}
-                      />
-                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            setReplyTo(null);
-                            setReplyText('');
-                          }}
-                        >
-                          {t('cancel')}
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleReply(comment._id)}
-                          disabled={commenting || !replyText.trim()}
-                        >
-                          {commenting ? t('addingReply') : t('reply')}
-                        </Button>
-                      </Box>
-                    </Box>
-                  )}
                   <Divider variant="inset" component="li" />
                 </React.Fragment>
               ))}
             </List>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => {
-              setCommentDialogOpen(false);
-              setReplyTo(null);
-              setReplyText('');
-            }}>{t('close')}</Button>
-          </DialogActions>
         </Dialog>
 
         {/* Snackbar for notifications */}
