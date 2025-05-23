@@ -160,22 +160,32 @@ const SearchResultsContainer = styled(Paper)(({ theme }) => ({
   overflowY: 'auto',
   boxShadow: theme.shadows[4],
   borderRadius: theme.shape.borderRadius,
-  backgroundColor: theme.palette.background.paper,
-  color: theme.palette.text.primary,
+  backgroundColor: '#ffffff',
+  '& .MuiListItemText-primary': {
+    color: '#000000 !important',
+  },
+  '& .MuiListItemText-secondary': {
+    color: 'rgba(0, 0, 0, 0.6) !important',
+  },
+  '& .MuiTypography-root': {
+    color: '#000000 !important',
+  },
 }));
 
 const SearchResultItem = styled(ListItem)(({ theme }) => ({
   '&:hover': {
-    backgroundColor: theme.palette.action.hover,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
   },
   cursor: 'pointer',
   padding: theme.spacing(2),
-  color: theme.palette.text.primary,
+  '& .MuiTypography-root': {
+    color: '#000000 !important',
+  },
   '& .MuiListItemText-primary': {
-    color: theme.palette.text.primary,
+    color: '#000000 !important',
   },
   '& .MuiListItemText-secondary': {
-    color: theme.palette.text.secondary,
+    color: 'rgba(0, 0, 0, 0.6) !important',
   },
 }));
 

@@ -16,6 +16,10 @@ const theme = createTheme({
       default: '#f5f5f5',
       paper: '#ffffff',
     },
+    text: {
+      primary: '#000000',
+      secondary: 'rgba(0, 0, 0, 0.6)',
+    },
   },
   typography: {
     fontFamily: [
