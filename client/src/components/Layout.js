@@ -72,7 +72,7 @@ function Layout() {
       </Box>
       <Divider />
       <List>
-        <ListItem button selected={location.pathname === '/dashboard'} onClick={() => navigate('/dashboard')}>
+        <ListItem button selected={location.pathname === '/dashboard'} onClick={() => navigate('/')}>
           <ListItemIcon>
             <DashboardIcon color={location.pathname === '/dashboard' ? 'primary' : 'inherit'} />
           </ListItemIcon>
