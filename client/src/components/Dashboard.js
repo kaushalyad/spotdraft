@@ -160,6 +160,8 @@ const SearchResultsContainer = styled(Paper)(({ theme }) => ({
   overflowY: 'auto',
   boxShadow: theme.shadows[4],
   borderRadius: theme.shape.borderRadius,
+  backgroundColor: theme.palette.background.paper,
+  color: theme.palette.text.primary,
 }));
 
 const SearchResultItem = styled(ListItem)(({ theme }) => ({
@@ -168,6 +170,13 @@ const SearchResultItem = styled(ListItem)(({ theme }) => ({
   },
   cursor: 'pointer',
   padding: theme.spacing(2),
+  color: theme.palette.text.primary,
+  '& .MuiListItemText-primary': {
+    color: theme.palette.text.primary,
+  },
+  '& .MuiListItemText-secondary': {
+    color: theme.palette.text.secondary,
+  },
 }));
 
 const drawerWidth = 240;
