@@ -35,38 +35,51 @@ const sendEmail = async (to, subject, html) => {
     console.log('EMAIL_FROM exists:', !!process.env.EMAIL_FROM);
     console.log('FRONTEND_URL exists:', !!process.env.FRONTEND_URL);
 
-    if (!process.env.SENDGRID_API_KEY) {
-      throw new Error('SendGrid API key is not configured');
+    // Try SendGrid first
+    if (process.env.SENDGRID_API_KEY) {
+      try {
+        const msg = {
+          to,
+          from: process.env.EMAIL_FROM,
+          subject,
+          html,
+        };
+
+        console.log('Attempting to send email via SendGrid to:', to);
+        const response = await sgMail.send(msg);
+        console.log('Email sent successfully via SendGrid:', response);
+        return true;
+      } catch (sendGridError) {
+        console.error('SendGrid error:', sendGridError);
+        // Fall back to Gmail if SendGrid fails
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+          throw sendGridError;
+        }
+      }
     }
 
-    if (!process.env.EMAIL_FROM) {
-      throw new Error('Sender email is not configured');
+    // Fall back to Gmail if SendGrid is not configured or failed
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to,
+        subject,
+        html,
+      };
+
+      console.log('Attempting to send email via Gmail to:', to);
+      const info = await transporter.sendMail(mailOptions);
+      console.log('Email sent successfully via Gmail:', info);
+      return true;
     }
 
-    if (!process.env.FRONTEND_URL) {
-      throw new Error('Frontend URL is not configured');
-    }
-
-    const msg = {
-      to,
-      from: process.env.EMAIL_FROM,
-      subject,
-      html,
-    };
-
-    console.log('Attempting to send email to:', to);
-    console.log('From email:', process.env.EMAIL_FROM);
-    console.log('Frontend URL:', process.env.FRONTEND_URL);
-    
-    const response = await sgMail.send(msg);
-    console.log('Email sent successfully:', response);
-    return true;
+    throw new Error('No email service configured');
   } catch (error) {
     console.error('Error sending email:', error);
     if (error.response) {
       console.error('SendGrid error details:', error.response.body);
     }
-    throw error;
+    throw new Error('Failed to send email. Please try again later.');
   }
 };
 
