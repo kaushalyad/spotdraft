@@ -80,7 +80,7 @@ function Home() {
               variant="contained" 
               color="secondary"
               size="large"
-              onClick={() => navigate('/signup')}
+              onClick={() => navigate('/register')}
               sx={{ 
                 px: 4,
                 py: 1.5,
