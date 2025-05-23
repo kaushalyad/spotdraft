@@ -19,7 +19,12 @@ const transporter = nodemailer.createTransport({
 });
 
 // Configure SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+if (!process.env.SENDGRID_API_KEY) {
+  console.error('SENDGRID_API_KEY is not configured');
+} else {
+  console.log('SendGrid API key is configured');
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 // Helper function to send emails
 const sendEmail = async (to, subject, html) => {
@@ -38,6 +43,10 @@ const sendEmail = async (to, subject, html) => {
       throw new Error('Sender email is not configured');
     }
 
+    if (!process.env.FRONTEND_URL) {
+      throw new Error('Frontend URL is not configured');
+    }
+
     const msg = {
       to,
       from: process.env.EMAIL_FROM,
@@ -46,6 +55,9 @@ const sendEmail = async (to, subject, html) => {
     };
 
     console.log('Attempting to send email to:', to);
+    console.log('From email:', process.env.EMAIL_FROM);
+    console.log('Frontend URL:', process.env.FRONTEND_URL);
+    
     const response = await sgMail.send(msg);
     console.log('Email sent successfully:', response);
     return true;
@@ -156,6 +168,8 @@ router.get('/profile', auth, async (req, res) => {
 router.post('/reset-password-request', async (req, res) => {
   try {
     console.log('Received reset password request');
+    console.log('Request body:', req.body);
+    
     const { email } = req.body;
     
     if (!email) {
