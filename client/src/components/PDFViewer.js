@@ -125,6 +125,7 @@ export function PDFViewer() {
   const [isRendering, setIsRendering] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
 
   const onDocumentLoadSuccess = ({ numPages }) => {
     setNumPages(numPages);
@@ -403,7 +404,7 @@ export function PDFViewer() {
         page: pageNumber
       });
 
-      const response = await fetch(`${API_URL}/pdf/${id}/comments`, {
+      const response = await fetch(`${API_URL}/api/pdf/${id}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -473,7 +474,7 @@ export function PDFViewer() {
         content: newComment
       });
 
-      const response = await fetch(`${API_URL}/pdf/${id}/comments/${parentCommentId}/replies`, {
+      const response = await fetch(`${API_URL}/api/pdf/${id}/comments/${parentCommentId}/replies`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

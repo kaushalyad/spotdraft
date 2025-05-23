@@ -82,9 +82,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     if (path.endsWith('.pdf')) {
       res.set('Content-Type', 'application/pdf');
       res.set('Content-Disposition', 'inline');
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.set('Pragma', 'no-cache');
-      res.set('Expires', '0');
+      res.set('Cache-Control', 'public, max-age=31536000');
+      res.set('Access-Control-Allow-Origin', 'https://spotdraft-w59a.onrender.com');
+      res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     }
   }
 }));
@@ -151,12 +152,19 @@ if (process.env.NODE_ENV === 'production') {
       }
       // Set cache headers
       res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
+      res.set('Access-Control-Allow-Origin', 'https://spotdraft-w59a.onrender.com');
     }
   }));
 
   // Handle React routing, return all requests to React app
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+    res.sendFile(path.join(__dirname, '../client/build', 'index.html'), {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
   });
 }
 
