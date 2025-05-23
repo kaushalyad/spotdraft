@@ -24,16 +24,30 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 // Helper function to send emails
 const sendEmail = async (to, subject, html) => {
   try {
+    if (!process.env.SENDGRID_API_KEY) {
+      throw new Error('SendGrid API key is not configured');
+    }
+
+    if (!process.env.EMAIL_FROM) {
+      throw new Error('Sender email is not configured');
+    }
+
     const msg = {
       to,
-      from: process.env.EMAIL_FROM || 'noreply@spotdraft.com',
+      from: process.env.EMAIL_FROM,
       subject,
       html,
     };
-    await sgMail.send(msg);
+
+    console.log('Attempting to send email to:', to);
+    const response = await sgMail.send(msg);
+    console.log('Email sent successfully:', response);
     return true;
   } catch (error) {
     console.error('Error sending email:', error);
+    if (error.response) {
+      console.error('SendGrid error details:', error.response.body);
+    }
     throw error;
   }
 };
@@ -133,7 +147,7 @@ router.get('/profile', auth, async (req, res) => {
 });
 
 // Request password reset
-router.post('/forgot-password', async (req, res) => {
+router.post('/reset-password-request', async (req, res) => {
   try {
     const { email } = req.body;
     
@@ -178,7 +192,9 @@ router.post('/forgot-password', async (req, res) => {
     `;
 
     try {
+      console.log('Sending reset password email to:', email);
       await sendEmail(user.email, 'Password Reset Request - SpotDraft', emailHtml);
+      console.log('Reset password email sent successfully');
       res.json({ 
         message: 'Password reset instructions have been sent to your email',
         success: true
@@ -196,7 +212,7 @@ router.post('/forgot-password', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error in forgot password:', error);
+    console.error('Error in reset password request:', error);
     res.status(500).json({ 
       message: 'An error occurred while processing your request',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -267,40 +283,6 @@ router.get('/verify', async (req, res) => {
   } catch (error) {
     console.error('Error in verify route:', error);
     res.status(500).json({ message: 'Error verifying token', error: error.message });
-  }
-});
-
-// Add reset password request route
-router.post('/reset-password-request', async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email });
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
-    await user.save();
-
-    // Send reset email
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-    const emailText = `You are receiving this because you (or someone else) requested a password reset.\n\n
-      Please click on the following link to reset your password:\n\n
-      ${resetUrl}\n\n
-      If you did not request this, please ignore this email and your password will remain unchanged.\n`;
-
-    // TODO: Implement email sending functionality
-    console.log('Reset password email would be sent to:', email);
-    console.log('Reset URL:', resetUrl);
-
-    res.json({ message: 'Password reset email sent' });
-  } catch (error) {
-    console.error('Reset password request error:', error);
-    res.status(500).json({ message: 'Error processing password reset request' });
   }
 });
 
