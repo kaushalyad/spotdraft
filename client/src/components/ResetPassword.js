@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -8,7 +9,7 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
-import { useNavigate, useParams } from 'react-router-dom';
+import axios from 'axios';
 import config from '../config';
 
 const ResetPassword = () => {
@@ -18,8 +19,8 @@ const ResetPassword = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const navigate = useNavigate();
   const { token } = useParams();
+  const navigate = useNavigate();
 
   const handleRequestReset = async (e) => {
     e.preventDefault();
@@ -28,24 +29,10 @@ const ResetPassword = () => {
     setSuccess('');
 
     try {
-      const response = await fetch(`${config.API_URL}/auth/reset-password-request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccess('Password reset instructions have been sent to your email');
-        setEmail('');
-      } else {
-        setError(data.message || 'Error requesting password reset');
-      }
-    } catch (error) {
-      setError('Error connecting to server');
+      const response = await axios.post(`${config.API_URL}/auth/reset-password-request`, { email });
+      setSuccess(response.data.message);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to send reset email. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -64,26 +51,13 @@ const ResetPassword = () => {
     }
 
     try {
-      const response = await fetch(`${config.API_URL}/auth/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token, newPassword }),
+      const response = await axios.post(`${config.API_URL}/auth/reset-password/${token}`, {
+        password: newPassword
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccess('Password has been reset successfully');
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
-      } else {
-        setError(data.message || 'Error resetting password');
-      }
-    } catch (error) {
-      setError('Error connecting to server');
+      setSuccess(response.data.message);
+      setTimeout(() => navigate('/login'), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reset password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -106,7 +80,9 @@ const ResetPassword = () => {
           p: 4,
           maxWidth: 400,
           width: '100%',
-          borderRadius: 2
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2
         }}
       >
         <Typography variant="h5" component="h1" gutterBottom align="center">
@@ -114,13 +90,13 @@ const ResetPassword = () => {
         </Typography>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity="error" onClose={() => setError('')}>
             {error}
           </Alert>
         )}
 
         {success && (
-          <Alert severity="success" sx={{ mb: 2 }}>
+          <Alert severity="success" onClose={() => setSuccess('')}>
             {success}
           </Alert>
         )}
@@ -146,9 +122,9 @@ const ResetPassword = () => {
               required
             />
             <Button
+              type="submit"
               fullWidth
               variant="contained"
-              type="submit"
               disabled={loading}
               sx={{ mt: 2 }}
             >
@@ -159,7 +135,7 @@ const ResetPassword = () => {
           <form onSubmit={handleRequestReset}>
             <TextField
               fullWidth
-              label="Email Address"
+              label="Email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -167,9 +143,9 @@ const ResetPassword = () => {
               required
             />
             <Button
+              type="submit"
               fullWidth
               variant="contained"
-              type="submit"
               disabled={loading}
               sx={{ mt: 2 }}
             >
@@ -177,15 +153,6 @@ const ResetPassword = () => {
             </Button>
           </form>
         )}
-
-        <Button
-          fullWidth
-          variant="text"
-          onClick={() => navigate('/login')}
-          sx={{ mt: 2 }}
-        >
-          Back to Login
-        </Button>
       </Paper>
     </Box>
   );

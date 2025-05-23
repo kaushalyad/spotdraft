@@ -35,49 +35,51 @@ const sendEmail = async (to, subject, html) => {
     console.log('EMAIL_FROM exists:', !!process.env.EMAIL_FROM);
     console.log('FRONTEND_URL exists:', !!process.env.FRONTEND_URL);
 
-    // Try SendGrid first
-    if (process.env.SENDGRID_API_KEY) {
-      try {
-        const msg = {
-          to,
-          from: process.env.EMAIL_FROM,
-          subject,
-          html,
-        };
+    // Validate required environment variables
+    if (!process.env.SENDGRID_API_KEY) {
+      console.error('SendGrid API key is missing');
+      throw new Error('Email service configuration is incomplete');
+    }
 
-        console.log('Attempting to send email via SendGrid to:', to);
-        const response = await sgMail.send(msg);
-        console.log('Email sent successfully via SendGrid:', response);
-        return true;
-      } catch (sendGridError) {
-        console.error('SendGrid error:', sendGridError);
-        // Fall back to Gmail if SendGrid fails
-        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-          throw sendGridError;
-        }
+    if (!process.env.EMAIL_FROM) {
+      console.error('Sender email is missing');
+      throw new Error('Email service configuration is incomplete');
+    }
+
+    if (!process.env.FRONTEND_URL) {
+      console.error('Frontend URL is missing');
+      throw new Error('Email service configuration is incomplete');
+    }
+
+    // Configure SendGrid
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+    const msg = {
+      to,
+      from: process.env.EMAIL_FROM,
+      subject,
+      html,
+      trackingSettings: {
+        clickTracking: { enable: true },
+        openTracking: { enable: true }
       }
-    }
+    };
 
-    // Fall back to Gmail if SendGrid is not configured or failed
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to,
-        subject,
-        html,
-      };
+    console.log('Attempting to send email via SendGrid to:', to);
+    console.log('From email:', process.env.EMAIL_FROM);
+    console.log('Frontend URL:', process.env.FRONTEND_URL);
 
-      console.log('Attempting to send email via Gmail to:', to);
-      const info = await transporter.sendMail(mailOptions);
-      console.log('Email sent successfully via Gmail:', info);
-      return true;
-    }
-
-    throw new Error('No email service configured');
+    const response = await sgMail.send(msg);
+    console.log('Email sent successfully:', response);
+    return true;
   } catch (error) {
     console.error('Error sending email:', error);
     if (error.response) {
-      console.error('SendGrid error details:', error.response.body);
+      console.error('SendGrid error details:', {
+        statusCode: error.response.statusCode,
+        body: error.response.body,
+        headers: error.response.headers
+      });
     }
     throw new Error('Failed to send email. Please try again later.');
   }
