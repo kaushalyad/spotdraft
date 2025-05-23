@@ -261,7 +261,7 @@ function Login() {
               <Typography variant="body1" color="text.secondary">
                 Don't have an account?{' '}
                 <Link 
-                  to="/signup" 
+                  to="/register" 
                   style={{ 
                     color: theme.palette.primary.main, 
                     textDecoration: 'none',
