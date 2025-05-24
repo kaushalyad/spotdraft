@@ -392,7 +392,7 @@ export function PDFViewer() {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`${API_URL}/pdf/shared/${token}`);
+      const response = await fetch(`${config.API_URL}/pdf/shared/${token}`);
       const data = await response.json();
       
       if (response.ok) {
