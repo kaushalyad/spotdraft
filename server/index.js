@@ -141,6 +141,19 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/user', userRoutes);
 
+// Handle shared URLs without /pdf prefix
+app.get('/shared/:token', (req, res) => {
+  res.redirect(`/pdf/shared/${req.params.token}`);
+});
+
+app.get('/shared/:token/file', (req, res) => {
+  res.redirect(`/pdf/shared/${req.params.token}/file`);
+});
+
+app.get('/shared/:token/comments', (req, res) => {
+  res.redirect(`/pdf/shared/${req.params.token}/comments`);
+});
+
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
   // Serve static files from the React build directory
