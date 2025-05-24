@@ -3,6 +3,11 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
+const fs = require('fs');
+const fetch = require('node-fetch');
+const { GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const app = express();
 
 // Enhanced error handling for uncaught exceptions
@@ -142,11 +147,204 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/user', userRoutes);
 
 // Handle shared URLs without /pdf prefix
-app.use('/shared', (req, res, next) => {
-  // Forward the request to the PDF routes
-  req.url = `/pdf${req.url}`;
-  next();
-}, pdfRoutes);
+app.get('/shared/:token', async (req, res) => {
+  try {
+    const token = req.params.token;
+    console.log('Shared PDF request received:', {
+      token,
+      headers: req.headers,
+      query: req.query,
+      url: req.url
+    });
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    console.log('Hashed token:', hashedToken);
+    
+    // Find the PDF with the given share token
+    const pdf = await PDF.findOne({ shareToken: hashedToken })
+      .populate('comments.user', 'name')
+      .populate('comments.replies.user', 'name')
+      .populate('owner', 'name');
+    
+    if (!pdf) {
+      console.log('PDF not found for token:', token);
+      return res.status(404).json({ message: 'PDF not found or not accessible' });
+    }
+
+    // Check if share is expired
+    if (pdf.shareSettings.expiresAt && new Date() > pdf.shareSettings.expiresAt) {
+      console.log('Share link expired:', {
+        token,
+        expiresAt: pdf.shareSettings.expiresAt
+      });
+      return res.status(403).json({ message: 'This share link has expired' });
+    }
+
+    // Check if max accesses reached
+    if (pdf.shareSettings.maxAccesses && 
+        pdf.shareSettings.accessCount >= pdf.shareSettings.maxAccesses) {
+      console.log('Max accesses reached:', {
+        token,
+        accessCount: pdf.shareSettings.accessCount,
+        maxAccesses: pdf.shareSettings.maxAccesses
+      });
+      return res.status(403).json({ message: 'Maximum access limit reached for this PDF' });
+    }
+
+    // Increment access count and update last accessed
+    pdf.shareSettings.accessCount = (pdf.shareSettings.accessCount || 0) + 1;
+    pdf.shareSettings.lastAccessed = new Date();
+    
+    // Initialize visitors array if it doesn't exist
+    if (!pdf.shareSettings.visitors) {
+      pdf.shareSettings.visitors = [];
+    }
+    
+    // Record visitor info
+    const visitorInfo = {
+      timestamp: new Date(),
+      userAgent: req.headers['user-agent'],
+      ip: req.ip
+    };
+    pdf.shareSettings.visitors.push(visitorInfo);
+    
+    await pdf.save();
+
+    // Calculate total comments including replies
+    const totalComments = pdf.comments.reduce((total, comment) => {
+      return total + 1 + (comment.replies ? comment.replies.length : 0);
+    }, 0);
+
+    // Only return necessary data for shared PDF
+    const responseData = {
+      id: pdf._id,
+      name: pdf.name,
+      description: pdf.description,
+      filePath: pdf.filePath,
+      shareToken: pdf.shareToken,
+      comments: pdf.comments,
+      totalComments,
+      totalViews: pdf.views.length,
+      totalDownloads: pdf.downloads.length,
+      shareSettings: {
+        allowDownload: pdf.shareSettings.allowDownload,
+        allowComments: pdf.shareSettings.allowComments,
+        expiresAt: pdf.shareSettings.expiresAt,
+        remainingAccesses: pdf.shareSettings.maxAccesses ? 
+          pdf.shareSettings.maxAccesses - pdf.shareSettings.accessCount : 
+          null
+      },
+      owner: {
+        name: pdf.owner.name
+      }
+    };
+
+    console.log('Sending shared PDF response:', {
+      id: responseData.id,
+      name: responseData.name,
+      totalComments: responseData.totalComments,
+      totalViews: responseData.totalViews,
+      totalDownloads: responseData.totalDownloads
+    });
+
+    res.json(responseData);
+  } catch (error) {
+    console.error('Error handling shared PDF request:', error);
+    res.status(500).json({ message: 'Error accessing shared PDF' });
+  }
+});
+
+app.get('/shared/:token/file', async (req, res) => {
+  try {
+    const token = req.params.token;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    
+    const pdf = await PDF.findOne({ shareToken: hashedToken });
+    if (!pdf) {
+      return res.status(404).json({ message: 'PDF not found' });
+    }
+
+    // Check if share is expired
+    if (pdf.shareSettings.expiresAt && new Date() > pdf.shareSettings.expiresAt) {
+      return res.status(403).json({ message: 'This share link has expired' });
+    }
+
+    // Check if max accesses reached
+    if (pdf.shareSettings.maxAccesses && 
+        pdf.shareSettings.accessCount >= pdf.shareSettings.maxAccesses) {
+      return res.status(403).json({ message: 'Maximum access limit reached for this PDF' });
+    }
+
+    // Check if file exists locally
+    const localFilePath = path.join(__dirname, pdf.filePath);
+    if (fs.existsSync(localFilePath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${pdf.name}.pdf"`);
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Pragma', 'no-cache');
+      
+      const fileStream = fs.createReadStream(localFilePath);
+      fileStream.pipe(res);
+    } else {
+      // Try to serve from S3
+      if (!process.env.AWS_S3_BUCKET || !process.env.AWS_REGION) {
+        return res.status(500).json({ message: 'S3 configuration error' });
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET,
+        Key: pdf.filePath
+      });
+
+      const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+      const response = await fetch(signedUrl);
+      
+      if (!response.ok) {
+        throw new Error(`S3 request failed with status ${response.status}`);
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${pdf.name}.pdf"`);
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Pragma', 'no-cache');
+
+      response.body.pipe(res);
+    }
+  } catch (error) {
+    console.error('Error handling shared PDF file request:', error);
+    res.status(500).json({ message: 'Error accessing shared PDF file' });
+  }
+});
+
+app.get('/shared/:token/comments', async (req, res) => {
+  try {
+    const token = req.params.token;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    
+    const pdf = await PDF.findOne({ shareToken: hashedToken })
+      .populate('comments.user', 'name')
+      .populate('comments.replies.user', 'name');
+    
+    if (!pdf) {
+      return res.status(404).json({ message: 'PDF not found' });
+    }
+
+    // Calculate total comments including replies
+    const totalComments = pdf.comments.reduce((total, comment) => {
+      return total + 1 + (comment.replies ? comment.replies.length : 0);
+    }, 0);
+
+    res.json({
+      comments: pdf.comments,
+      totalComments,
+      totalViews: pdf.views.length,
+      totalDownloads: pdf.downloads.length
+    });
+  } catch (error) {
+    console.error('Error handling shared PDF comments request:', error);
+    res.status(500).json({ message: 'Error accessing shared PDF comments' });
+  }
+});
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
