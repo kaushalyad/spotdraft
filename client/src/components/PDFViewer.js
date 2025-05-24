@@ -632,8 +632,8 @@ export function PDFViewer() {
       const data = await response.json();
       console.log('Access granted and link generated:', data);
 
-      // Generate the full share URL using production URL
-      const shareUrl = `https://spotdraft-w59a.onrender.com/shared/${data.token}`;
+      // Generate the full share URL using frontend URL from config
+      const shareUrl = `${config.FRONTEND_URL}/shared/${data.token}`;
       setShareLink(shareUrl);
 
       // Close email dialog and show success message with copy option
@@ -702,8 +702,8 @@ export function PDFViewer() {
       const data = await response.json();
       console.log('Share link generated:', data);
 
-      // Generate the full share URL using production URL
-      const shareUrl = `https://spotdraft-w59a.onrender.com/shared/${data.token}`;
+      // Generate the full share URL using frontend URL from config
+      const shareUrl = `${config.FRONTEND_URL}/shared/${data.token}`;
       setShareLink(shareUrl);
       setShowShareDialog(true);
 

@@ -6,9 +6,21 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 const fetch = require('node-fetch');
-const { GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const app = express();
+
+// Import models
+const PDF = require('./models/PDF');
+
+// Initialize S3 client
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
 
 // Enhanced error handling for uncaught exceptions
 process.on('uncaughtException', (err) => {
@@ -154,7 +166,13 @@ app.get('/shared/:token', async (req, res) => {
       token,
       headers: req.headers,
       query: req.query,
-      url: req.url
+      url: req.url,
+      method: req.method,
+      path: req.path,
+      originalUrl: req.originalUrl,
+      baseUrl: req.baseUrl,
+      ip: req.ip,
+      timestamp: new Date().toISOString()
     });
 
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
@@ -166,6 +184,14 @@ app.get('/shared/:token', async (req, res) => {
       .populate('comments.replies.user', 'name')
       .populate('owner', 'name');
     
+    console.log('PDF search result:', {
+      found: !!pdf,
+      id: pdf?._id,
+      name: pdf?.name,
+      shareToken: pdf?.shareToken,
+      hashedToken
+    });
+
     if (!pdf) {
       console.log('PDF not found for token:', token);
       return res.status(404).json({ message: 'PDF not found or not accessible' });
@@ -349,36 +375,26 @@ app.get('/shared/:token/comments', async (req, res) => {
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
   // Serve static files from the React build directory
-  app.use((req, res, next) => {
-    // Skip static file serving for shared PDF routes
-    if (req.path.startsWith('/shared/')) {
-      return next();
-    }
-    express.static(path.join(__dirname, '../client/build'), {
-      setHeaders: (res, filePath) => {
-        // Set proper MIME types for JavaScript files
-        if (filePath.endsWith('.js')) {
-          res.set('Content-Type', 'application/javascript');
-        }
-        // Set proper MIME types for CSS files
-        if (filePath.endsWith('.css')) {
-          res.set('Content-Type', 'text/css');
-        }
-        // Set cache headers
-        res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
-        res.set('Access-Control-Allow-Origin', '*');
-        res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  app.use(express.static(path.join(__dirname, '../client/build'), {
+    setHeaders: (res, filePath) => {
+      // Set proper MIME types for JavaScript files
+      if (filePath.endsWith('.js')) {
+        res.set('Content-Type', 'application/javascript');
       }
-    })(req, res, next);
-  });
+      // Set proper MIME types for CSS files
+      if (filePath.endsWith('.css')) {
+        res.set('Content-Type', 'text/css');
+      }
+      // Set cache headers
+      res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    }
+  }));
 
   // Handle React routing, return all requests to React app
-  app.get('*', (req, res, next) => {
-    // Skip React routing for shared PDF routes
-    if (req.path.startsWith('/shared/')) {
-      return next();
-    }
+  app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/build', 'index.html'), {
       headers: {
         'Content-Type': 'text/html',
