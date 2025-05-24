@@ -349,26 +349,36 @@ app.get('/shared/:token/comments', async (req, res) => {
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
   // Serve static files from the React build directory
-  app.use(express.static(path.join(__dirname, '../client/build'), {
-    setHeaders: (res, filePath) => {
-      // Set proper MIME types for JavaScript files
-      if (filePath.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      }
-      // Set proper MIME types for CSS files
-      if (filePath.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-      // Set cache headers
-      res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
-      res.set('Access-Control-Allow-Origin', '*');
-      res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  app.use((req, res, next) => {
+    // Skip static file serving for shared PDF routes
+    if (req.path.startsWith('/shared/')) {
+      return next();
     }
-  }));
+    express.static(path.join(__dirname, '../client/build'), {
+      setHeaders: (res, filePath) => {
+        // Set proper MIME types for JavaScript files
+        if (filePath.endsWith('.js')) {
+          res.set('Content-Type', 'application/javascript');
+        }
+        // Set proper MIME types for CSS files
+        if (filePath.endsWith('.css')) {
+          res.set('Content-Type', 'text/css');
+        }
+        // Set cache headers
+        res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      }
+    })(req, res, next);
+  });
 
   // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
+  app.get('*', (req, res, next) => {
+    // Skip React routing for shared PDF routes
+    if (req.path.startsWith('/shared/')) {
+      return next();
+    }
     res.sendFile(path.join(__dirname, '../client/build', 'index.html'), {
       headers: {
         'Content-Type': 'text/html',
