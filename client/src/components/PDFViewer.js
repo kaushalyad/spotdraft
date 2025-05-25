@@ -633,7 +633,7 @@ export function PDFViewer() {
       console.log('Access granted and link generated:', data);
 
       // Generate the full share URL using frontend URL from config
-      const shareUrl = `${config.FRONTEND_URL}/shared/${data.token}`;
+      const shareUrl = `${config.FRONTEND_URL}/#/shared/${data.token}`;
       setShareLink(shareUrl);
 
       // Close email dialog and show success message with copy option
@@ -703,13 +703,13 @@ export function PDFViewer() {
       console.log('Share link generated:', data);
 
       // Generate the full share URL using frontend URL from config
-      const shareUrl = `${config.FRONTEND_URL}/shared/${data.token}`;
+      const shareUrl = `${config.FRONTEND_URL}/#/shared/${data.token}`;
       setShareLink(shareUrl);
       setShowShareDialog(true);
 
       setSnackbar({
         open: true,
-        message: 'Share link generated and access granted successfully',
+        message: 'Share link generated successfully',
         severity: 'success'
       });
     } catch (error) {

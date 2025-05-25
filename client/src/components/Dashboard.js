@@ -880,7 +880,7 @@ const Dashboard = memo(() => {
       console.log('Access granted and link generated:', data);
 
       // Generate the full share URL using frontend URL from config
-      const shareUrl = `${config.FRONTEND_URL}/shared/${data.token}`;
+      const shareUrl = `${config.FRONTEND_URL}/#/shared/${data.token}`;
       setShareLink(shareUrl);
 
       // Close email dialog and show success message with copy option

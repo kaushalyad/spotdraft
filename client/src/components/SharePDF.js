@@ -12,7 +12,8 @@ import {
   Alert,
   Box,
   IconButton,
-  Tooltip
+  Tooltip,
+  Chip
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import axios from 'axios';
@@ -50,7 +51,14 @@ const SharePDF = ({ pdf, open, onClose }) => {
         `${config.API_URL}/pdf/${pdf._id}/share`,
         {
           email,
-          permissions
+          permissions,
+          shareSettings: {
+            shareType: 'public',
+            linkExpiry: '7d',
+            allowDownload: permissions.download,
+            allowComments: permissions.comment,
+            notifyOnAccess: true
+          }
         },
         {
           headers: {
@@ -59,7 +67,9 @@ const SharePDF = ({ pdf, open, onClose }) => {
         }
       );
 
-      setShareLink(response.data.shareLink);
+      // Generate the full share URL using frontend URL from config
+      const shareUrl = `${config.FRONTEND_URL}/#/shared/${response.data.token}`;
+      setShareLink(shareUrl);
       setSuccess('Access granted successfully! The user will receive an email with access instructions.');
     } catch (error) {
       setError(error.response?.data?.message || 'Error granting access');
@@ -73,88 +83,109 @@ const SharePDF = ({ pdf, open, onClose }) => {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Grant Access to PDF</DialogTitle>
+      <DialogTitle>Share PDF</DialogTitle>
       <DialogContent>
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-        
-        <TextField
-          fullWidth
-          label="Email Address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          margin="normal"
-          type="email"
-          required
-          helperText="Enter the email address to grant access to"
-        />
+        <Box sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            label="Email Address"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter email address"
+            sx={{ mb: 2 }}
+          />
 
-        <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-          Access Permissions
-        </Typography>
-
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={permissions.view}
-              onChange={handlePermissionChange('view')}
-              disabled
+          <Typography variant="subtitle2" gutterBottom>
+            Permissions:
+          </Typography>
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={permissions.view}
+                  onChange={handlePermissionChange('view')}
+                  disabled
+                />
+              }
+              label="View"
             />
-          }
-          label="View"
-        />
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={permissions.comment}
-              onChange={handlePermissionChange('comment')}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={permissions.comment}
+                  onChange={handlePermissionChange('comment')}
+                />
+              }
+              label="Comment"
             />
-          }
-          label="Comment"
-        />
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={permissions.download}
-              onChange={handlePermissionChange('download')}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={permissions.download}
+                  onChange={handlePermissionChange('download')}
+                />
+              }
+              label="Download"
             />
-          }
-          label="Download"
-        />
-
-        {shareLink && (
-          <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Access Link Generated
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography
-                sx={{
-                  flex: 1,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {shareLink}
-              </Typography>
-              <Tooltip title="Copy Link">
-                <IconButton onClick={copyToClipboard} size="small">
-                  <ContentCopyIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
           </Box>
-        )}
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {success && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {success}
+            </Alert>
+          )}
+
+          {shareLink && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Share Link:
+              </Typography>
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 1,
+                bgcolor: 'background.paper',
+                p: 1,
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: 'divider'
+              }}>
+                <Typography
+                  sx={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {shareLink}
+                </Typography>
+                <Tooltip title="Copy to clipboard">
+                  <IconButton onClick={copyToClipboard} size="small">
+                    <ContentCopyIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+          )}
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={handleShare}
-          variant="contained"
-          disabled={!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)}
+        <Button 
+          onClick={handleShare} 
+          variant="contained" 
+          disabled={!email.trim()}
         >
-          Grant Access
+          Share
         </Button>
       </DialogActions>
     </Dialog>
