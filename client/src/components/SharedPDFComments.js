@@ -168,7 +168,8 @@ export default function SharedPDFComments({ onCommentAdd }) {
       const response = await axios.post(`${API_URL}/pdf/shared/${token}/comments/${parentCommentId}/replies`, {
         content: replyContent.trim(),
         formattedContent: replyContent.trim(),
-        ...guestInfo
+        name: guestInfo.name,
+        email: guestInfo.email
       });
 
       console.log('Reply added successfully:', response.data);
@@ -177,7 +178,16 @@ export default function SharedPDFComments({ onCommentAdd }) {
       setComments(prevComments => 
         prevComments.map(comment => 
           comment._id === parentCommentId
-            ? { ...comment, replies: [...(comment.replies || []), response.data] }
+            ? { 
+                ...comment, 
+                replies: [...(comment.replies || []), {
+                  ...response.data,
+                  user: {
+                    name: guestInfo.name,
+                    email: guestInfo.email
+                  }
+                }]
+              }
             : comment
         )
       );

@@ -2265,13 +2265,13 @@ const Dashboard = memo(() => {
                   <ListItem alignItems="flex-start">
                     <ListItemAvatar>
                       <Avatar>
-                        {comment.user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                        {comment.user?.name?.charAt(0)?.toUpperCase() || user?.name?.charAt(0)?.toUpperCase() || 'U'}
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText
                       primary={
                         <Typography variant="subtitle2">
-                          {comment.user?.name || 'Anonymous'}
+                          {comment.user?.name || user?.name || 'Anonymous'}
                         </Typography>
                       }
                       secondary={
@@ -2330,25 +2330,21 @@ const Dashboard = memo(() => {
                     <ListItem key={reply._id} sx={{ pl: 9 }}>
                       <ListItemAvatar>
                         <Avatar sx={{ width: 24, height: 24 }}>
-                          {reply.user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                          {reply.user?.name?.charAt(0)?.toUpperCase() || user?.name?.charAt(0)?.toUpperCase() || 'U'}
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText
                         primary={
-                          <Typography variant="subtitle2">
-                            {reply.user?.name || 'Anonymous'}
-                          </Typography>
-                        }
-                        secondary={
-                          <>
-                            <Typography variant="body2" color="text.primary">
-                              {reply.content}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="subtitle2" sx={{ fontSize: '0.875rem' }}>
+                              {reply.user?.name || user?.name || 'Anonymous'}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               {new Date(reply.createdAt).toLocaleString()}
                             </Typography>
-                          </>
+                          </Box>
                         }
+                        secondary={reply.content}
                       />
                     </ListItem>
                   ))}
