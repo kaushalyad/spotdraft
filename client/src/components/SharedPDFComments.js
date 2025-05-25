@@ -54,6 +54,21 @@ export default function SharedPDFComments({ onCommentAdd }) {
       return;
     }
 
+    // Check if guest info exists
+    const storedName = localStorage.getItem('guestName');
+    const storedEmail = localStorage.getItem('guestEmail');
+    
+    if (!storedName || !storedEmail) {
+      setError('Please provide your information to view comments');
+      setLoading(false);
+      return;
+    }
+
+    setGuestInfo({
+      name: storedName,
+      email: storedEmail
+    });
+
     fetchComments();
   }, [token]);
 
@@ -90,10 +105,10 @@ export default function SharedPDFComments({ onCommentAdd }) {
       return;
     }
 
-    if (!token) {
+    if (!guestInfo.name || !guestInfo.email) {
       setSnackbar({
         open: true,
-        message: 'Invalid share token',
+        message: 'Please provide your information to add comments',
         severity: 'error'
       });
       return;
@@ -111,13 +126,20 @@ export default function SharedPDFComments({ onCommentAdd }) {
         content: newComment.trim(),
         page: pageNumber,
         position: { x: 0, y: 0 },
-        ...guestInfo
+        name: guestInfo.name,
+        email: guestInfo.email
       });
 
       console.log('Comment added successfully:', response.data);
 
       // Update the comments state with the new comment
-      setComments(prevComments => [...prevComments, response.data]);
+      setComments(prevComments => [...prevComments, {
+        ...response.data,
+        user: {
+          name: guestInfo.name,
+          email: guestInfo.email
+        }
+      }]);
       setNewComment('');
       setSnackbar({
         open: true,
@@ -148,10 +170,10 @@ export default function SharedPDFComments({ onCommentAdd }) {
       return;
     }
 
-    if (!token) {
+    if (!guestInfo.name || !guestInfo.email) {
       setSnackbar({
         open: true,
-        message: 'Invalid share token',
+        message: 'Please provide your information to add replies',
         severity: 'error'
       });
       return;

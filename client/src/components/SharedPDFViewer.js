@@ -64,11 +64,16 @@ function SharedPDFViewer() {
   const [rotation, setRotation] = useState(0);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [password, setPassword] = useState('');
-  const [guestInfo, setGuestInfo] = useState({ name: '', email: '' });
+  const [guestInfo, setGuestInfo] = useState({
+    name: localStorage.getItem('guestName') || '',
+    email: localStorage.getItem('guestEmail') || ''
+  });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [passwordError, setPasswordError] = useState('');
   const [isLoadingPage, setIsLoadingPage] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showRegistration, setShowRegistration] = useState(true);
+  const [registrationError, setRegistrationError] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
@@ -243,9 +248,35 @@ function SharedPDFViewer() {
     }, 0);
   };
 
+  const handleRegistration = async (e) => {
+    e.preventDefault();
+    setRegistrationError('');
+
+    if (!guestInfo.name.trim() || !guestInfo.email.trim()) {
+      setRegistrationError('Please provide both name and email');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(guestInfo.email)) {
+      setRegistrationError('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      // Store guest info in localStorage
+      localStorage.setItem('guestName', guestInfo.name);
+      localStorage.setItem('guestEmail', guestInfo.email);
+      setShowRegistration(false);
+    } catch (error) {
+      setRegistrationError('Error saving registration information');
+    }
+  };
+
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
       </Box>
     );
@@ -253,13 +284,60 @@ function SharedPDFViewer() {
 
   if (error) {
     return (
-      <Container maxWidth="md" sx={{ mt: 4 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-        <Button variant="contained" onClick={() => navigate('/')}>
-          {t('backToHome')}
-        </Button>
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
+  if (showRegistration) {
+    return (
+      <Container maxWidth="sm" sx={{ mt: 8 }}>
+        <Paper sx={{ p: 4, borderRadius: 2 }}>
+          <Typography variant="h5" gutterBottom align="center">
+            Access Shared PDF
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }} align="center">
+            Please provide your information to access this shared PDF
+          </Typography>
+          
+          {registrationError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {registrationError}
+            </Alert>
+          )}
+
+          <Box component="form" onSubmit={handleRegistration}>
+            <TextField
+              fullWidth
+              label="Your Name"
+              value={guestInfo.name}
+              onChange={(e) => setGuestInfo(prev => ({ ...prev, name: e.target.value }))}
+              margin="normal"
+              required
+              error={!!registrationError && !guestInfo.name.trim()}
+            />
+            <TextField
+              fullWidth
+              label="Email Address"
+              type="email"
+              value={guestInfo.email}
+              onChange={(e) => setGuestInfo(prev => ({ ...prev, email: e.target.value }))}
+              margin="normal"
+              required
+              error={!!registrationError && !guestInfo.email.trim()}
+              helperText={registrationError && !guestInfo.email.trim() ? 'Email is required' : ''}
+            />
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3 }}
+            >
+              Continue to PDF
+            </Button>
+          </Box>
+        </Paper>
       </Container>
     );
   }

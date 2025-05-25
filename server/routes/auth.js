@@ -188,7 +188,7 @@ router.post('/reset-password-request', async (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL || 'https://spotdraft-w59a.onrender.com';
 
     // Send reset email using nodemailer
-    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+    const resetUrl = `${frontendUrl}/#/reset-password/${resetToken}`;
     console.log('Reset URL generated:', resetUrl);
 
     const emailText = `You are receiving this because you (or someone else) requested a password reset.\n\n
