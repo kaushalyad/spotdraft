@@ -1,28 +1,33 @@
 {
-  "name": "pdf-collab-server",
+  "name": "spotdraft-backend",
   "version": "1.0.0",
-  "description": "Backend for PDF Management & Collaboration System",
+  "description": "Backend server for SpotDraft PDF Management System",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "jest"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.0.0",
-    "@aws-sdk/s3-request-presigner": "^3.0.0",
-    "@sendgrid/mail": "^8.1.5",
-    "aws-sdk": "^2.1354.0",
-    "bcrypt": "^5.1.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "express-rate-limit": "^6.7.0",
+    "helmet": "^6.1.5",
     "jsonwebtoken": "^9.0.0",
-    "mongoose": "^6.10.0",
+    "mongoose": "^7.0.3",
+    "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^7.0.3",
-    "sendgrid": "^5.2.3"
+    "nodemailer": "^6.9.1",
+    "validator": "^13.9.0"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "jest": "^29.5.0",
+    "nodemon": "^2.0.22",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
