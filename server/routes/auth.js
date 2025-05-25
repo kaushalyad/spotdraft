@@ -10,13 +10,16 @@ const router = express.Router();
 
 // Configure nodemailer
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD
   },
-  debug: true,
-  logger: true
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
 // Helper function to send emails
@@ -27,6 +30,7 @@ const sendEmail = async (to, subject, text) => {
     console.log('EMAIL_USER exists:', !!process.env.EMAIL_USER);
     console.log('EMAIL_PASSWORD exists:', !!process.env.EMAIL_PASSWORD);
     console.log('FRONTEND_URL exists:', !!process.env.FRONTEND_URL);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
 
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
       console.error('Email configuration missing');
@@ -181,9 +185,7 @@ router.post('/reset-password-request', async (req, res) => {
     console.log('Reset token generated and saved');
 
     // Determine the correct frontend URL based on environment
-    const frontendUrl = process.env.NODE_ENV === 'production' 
-      ? process.env.FRONTEND_URL 
-      : 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://spotdraft-w59a.onrender.com';
 
     // Send reset email using nodemailer
     const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;

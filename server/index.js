@@ -158,122 +158,49 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/user', userRoutes);
 
-// Handle shared URLs without /pdf prefix
+// Handle shared PDF routes
 app.get('/shared/:token', async (req, res) => {
   try {
     const token = req.params.token;
-    console.log('Shared PDF request received:', {
-      token,
-      headers: req.headers,
-      query: req.query,
-      url: req.url,
-      method: req.method,
-      path: req.path,
-      originalUrl: req.originalUrl,
-      baseUrl: req.baseUrl,
-      ip: req.ip,
-      timestamp: new Date().toISOString()
-    });
-
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    console.log('Hashed token:', hashedToken);
     
-    // Find the PDF with the given share token
     const pdf = await PDF.findOne({ shareToken: hashedToken })
       .populate('comments.user', 'name')
       .populate('comments.replies.user', 'name')
       .populate('owner', 'name');
     
-    console.log('PDF search result:', {
-      found: !!pdf,
-      id: pdf?._id,
-      name: pdf?.name,
-      shareToken: pdf?.shareToken,
-      hashedToken
-    });
-
     if (!pdf) {
-      console.log('PDF not found for token:', token);
       return res.status(404).json({ message: 'PDF not found or not accessible' });
     }
 
     // Check if share is expired
     if (pdf.shareSettings.expiresAt && new Date() > pdf.shareSettings.expiresAt) {
-      console.log('Share link expired:', {
-        token,
-        expiresAt: pdf.shareSettings.expiresAt
-      });
       return res.status(403).json({ message: 'This share link has expired' });
     }
 
     // Check if max accesses reached
     if (pdf.shareSettings.maxAccesses && 
         pdf.shareSettings.accessCount >= pdf.shareSettings.maxAccesses) {
-      console.log('Max accesses reached:', {
-        token,
-        accessCount: pdf.shareSettings.accessCount,
-        maxAccesses: pdf.shareSettings.maxAccesses
-      });
       return res.status(403).json({ message: 'Maximum access limit reached for this PDF' });
     }
 
     // Increment access count and update last accessed
     pdf.shareSettings.accessCount = (pdf.shareSettings.accessCount || 0) + 1;
     pdf.shareSettings.lastAccessed = new Date();
-    
-    // Initialize visitors array if it doesn't exist
-    if (!pdf.shareSettings.visitors) {
-      pdf.shareSettings.visitors = [];
-    }
-    
-    // Record visitor info
-    const visitorInfo = {
-      timestamp: new Date(),
-      userAgent: req.headers['user-agent'],
-      ip: req.ip
-    };
-    pdf.shareSettings.visitors.push(visitorInfo);
-    
     await pdf.save();
 
-    // Calculate total comments including replies
-    const totalComments = pdf.comments.reduce((total, comment) => {
-      return total + 1 + (comment.replies ? comment.replies.length : 0);
-    }, 0);
-
-    // Only return necessary data for shared PDF
-    const responseData = {
+    res.json({
       id: pdf._id,
       name: pdf.name,
       description: pdf.description,
       filePath: pdf.filePath,
       shareToken: pdf.shareToken,
       comments: pdf.comments,
-      totalComments,
-      totalViews: pdf.views.length,
-      totalDownloads: pdf.downloads.length,
-      shareSettings: {
-        allowDownload: pdf.shareSettings.allowDownload,
-        allowComments: pdf.shareSettings.allowComments,
-        expiresAt: pdf.shareSettings.expiresAt,
-        remainingAccesses: pdf.shareSettings.maxAccesses ? 
-          pdf.shareSettings.maxAccesses - pdf.shareSettings.accessCount : 
-          null
-      },
+      shareSettings: pdf.shareSettings,
       owner: {
         name: pdf.owner.name
       }
-    };
-
-    console.log('Sending shared PDF response:', {
-      id: responseData.id,
-      name: responseData.name,
-      totalComments: responseData.totalComments,
-      totalViews: responseData.totalViews,
-      totalDownloads: responseData.totalDownloads
     });
-
-    res.json(responseData);
   } catch (error) {
     console.error('Error handling shared PDF request:', error);
     res.status(500).json({ message: 'Error accessing shared PDF' });

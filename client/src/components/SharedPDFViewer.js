@@ -75,7 +75,7 @@ function SharedPDFViewer() {
 
   // Memoize the file props
   const fileProps = useMemo(() => ({
-    url: `${config.API_URL}/pdf/shared/${token}/file`,
+    url: `${config.API_URL}/shared/${token}/file`,
     httpHeaders: {
       'Content-Type': 'application/pdf',
       'Cache-Control': 'no-cache',
@@ -122,7 +122,7 @@ function SharedPDFViewer() {
       try {
         setLoading(true);
         setError('');
-        const response = await axios.get(`${config.API_URL}/pdf/shared/${token}`);
+        const response = await axios.get(`${config.API_URL}/shared/${token}`);
         setPdfData(response.data);
         
         if (response.data.requiresPassword) {
@@ -130,6 +130,11 @@ function SharedPDFViewer() {
         }
       } catch (err) {
         setError(err.response?.data?.message || 'Invalid or expired share link');
+        setSnackbar({
+          open: true,
+          message: err.response?.data?.message || 'Invalid or expired share link',
+          severity: 'error'
+        });
       } finally {
         setLoading(false);
       }
