@@ -372,52 +372,13 @@ app.get('/shared/:token/comments', async (req, res) => {
   }
 });
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from the React build directory
-  app.use(express.static(path.join(__dirname, '../client/build'), {
-    setHeaders: (res, filePath) => {
-      // Set proper MIME types for JavaScript files
-      if (filePath.endsWith('.js')) {
-        res.set('Content-Type', 'application/javascript');
-      }
-      // Set proper MIME types for CSS files
-      if (filePath.endsWith('.css')) {
-        res.set('Content-Type', 'text/css');
-      }
-      // Set cache headers
-      res.set('Cache-Control', 'public, max-age=31536000'); // 1 year
-      res.set('Access-Control-Allow-Origin', '*');
-      res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    }
-  }));
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../client/build')));
 
-  // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build', 'index.html'), {
-      headers: {
-        'Content-Type': 'text/html',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
-  });
-} else {
-  // Handle shared URLs without /pdf prefix in development
-  app.get('/shared/:token', (req, res) => {
-    res.redirect(`/pdf/shared/${req.params.token}`);
-  });
-
-  app.get('/shared/:token/file', (req, res) => {
-    res.redirect(`/pdf/shared/${req.params.token}/file`);
-  });
-
-  app.get('/shared/:token/comments', (req, res) => {
-    res.redirect(`/pdf/shared/${req.params.token}/comments`);
-  });
-}
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+});
 
 // 404 handler - must be last
 app.use((req, res) => {

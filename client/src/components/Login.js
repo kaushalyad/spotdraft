@@ -252,7 +252,7 @@ function Login() {
               <Grid item xs>
                 <Link
                   component={RouterLink}
-                  to="/reset-password"
+                  to="/forgot-password"
                   variant="body2"
                   sx={{ textDecoration: 'none' }}
                 >

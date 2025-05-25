@@ -5,7 +5,6 @@ const User = require('../models/User');
 const auth = require('../middleware/auth');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const sgMail = require('@sendgrid/mail');
 
 const router = express.Router();
 
@@ -13,99 +12,47 @@ const router = express.Router();
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER || 'your-email@gmail.com',
-    pass: process.env.EMAIL_PASSWORD || 'your-app-specific-password'
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD
+  },
+  debug: true,
+  logger: true
 });
 
-// Configure SendGrid
-if (!process.env.SENDGRID_API_KEY) {
-  console.error('SENDGRID_API_KEY is not configured');
-} else {
-  console.log('SendGrid API key is configured');
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
-
 // Helper function to send emails
-const sendEmail = async (to, subject, html) => {
+const sendEmail = async (to, subject, text) => {
   try {
-    // Log environment variables (without sensitive data)
-    console.log('Checking email configuration...');
-    console.log('SENDGRID_API_KEY exists:', !!process.env.SENDGRID_API_KEY);
-    console.log('EMAIL_FROM exists:', !!process.env.EMAIL_FROM);
+    // Log email configuration (without sensitive data)
+    console.log('Email configuration check:');
+    console.log('EMAIL_USER exists:', !!process.env.EMAIL_USER);
+    console.log('EMAIL_PASSWORD exists:', !!process.env.EMAIL_PASSWORD);
     console.log('FRONTEND_URL exists:', !!process.env.FRONTEND_URL);
 
-    // Validate required environment variables
-    if (!process.env.SENDGRID_API_KEY) {
-      console.error('SendGrid API key is missing');
-      throw new Error('Email service configuration is incomplete');
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+      console.error('Email configuration missing');
+      throw new Error('Email configuration missing');
     }
 
-    if (!process.env.EMAIL_FROM) {
-      console.error('Sender email is missing');
-      throw new Error('Email service configuration is incomplete');
-    }
-
-    if (!process.env.FRONTEND_URL) {
-      console.error('Frontend URL is missing');
-      throw new Error('Email service configuration is incomplete');
-    }
-
-    // Configure SendGrid
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-    const msg = {
+    const mailOptions = {
+      from: `"SpotDraft" <${process.env.EMAIL_USER}>`,
       to,
-      from: {
-        email: process.env.EMAIL_FROM,
-        name: 'SpotDraft Team'
-      },
       subject,
-      html,
-      trackingSettings: {
-        clickTracking: { enable: true },
-        openTracking: { enable: true }
-      }
+      text,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+          <h2 style="color: #333;">Password Reset Request</h2>
+          <p style="color: #666; line-height: 1.6;">${text}</p>
+          <p style="color: #666; line-height: 1.6;">If you did not request this, please ignore this email and your password will remain unchanged.</p>
+        </div>
+      `
     };
 
-    console.log('Attempting to send email via SendGrid to:', to);
-    console.log('From email:', process.env.EMAIL_FROM);
-    console.log('Frontend URL:', process.env.FRONTEND_URL);
-
-    try {
-      const response = await sgMail.send(msg);
-      console.log('Email sent successfully:', response);
-      return true;
-    } catch (sendGridError) {
-      console.error('SendGrid error:', sendGridError);
-      if (sendGridError.response) {
-        console.error('SendGrid error details:', {
-          statusCode: sendGridError.response.statusCode,
-          body: sendGridError.response.body,
-          headers: sendGridError.response.headers
-        });
-        
-        // Check for specific error types
-        if (sendGridError.response.body?.errors) {
-          const errors = sendGridError.response.body.errors;
-          for (const error of errors) {
-            console.error('SendGrid error message:', error.message);
-            if (error.message.includes('verify')) {
-              throw new Error('Sender email not verified with SendGrid. Please verify your email address.');
-            }
-            if (error.message.includes('domain')) {
-              throw new Error('Sender domain not authenticated with SendGrid. Please authenticate your domain.');
-            }
-            if (error.message.includes('permission')) {
-              throw new Error('Insufficient SendGrid API permissions. Please check your API key settings.');
-            }
-          }
-        }
-      }
-      throw new Error('Failed to send email. Please try again later.');
-    }
+    console.log('Attempting to send email to:', to);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully:', info);
+    return true;
   } catch (error) {
-    console.error('Error in sendEmail:', error);
+    console.error('Error sending email:', error);
     throw error;
   }
 };
@@ -219,6 +166,7 @@ router.post('/reset-password-request', async (req, res) => {
 
     console.log('Looking up user with email:', email);
     const user = await User.findOne({ email });
+
     if (!user) {
       console.log('No user found with email:', email);
       return res.status(404).json({ message: 'No account found with this email address' });
@@ -237,46 +185,18 @@ router.post('/reset-password-request', async (req, res) => {
       ? process.env.FRONTEND_URL 
       : 'http://localhost:3000';
 
-    // Send reset email using SendGrid
+    // Send reset email using nodemailer
     const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
     console.log('Reset URL generated:', resetUrl);
 
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #333; margin: 0;">SpotDraft</h1>
-        </div>
-        <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
-        <p style="color: #666; line-height: 1.6;">Hello ${user.name},</p>
-        <p style="color: #666; line-height: 1.6;">We received a request to reset your password. Click the button below to reset your password:</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${resetUrl}" 
-             style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">
-            Reset Password
-          </a>
-        </div>
-        <p style="color: #666; line-height: 1.6;">Or copy and paste this link in your browser:</p>
-        <p style="color: #666; line-height: 1.6; word-break: break-all;">${resetUrl}</p>
-        <p style="color: #666; line-height: 1.6;">This link will expire in 1 hour.</p>
-        <p style="color: #666; line-height: 1.6;">If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
-        <hr style="border: 1px solid #eee; margin: 20px 0;">
-        <p style="color: #999; font-size: 12px; text-align: center;">
-          This is an automated message, please do not reply to this email.
-        </p>
-      </div>
-    `;
+    const emailText = `You are receiving this because you (or someone else) requested a password reset.\n\n
+      Please click on the following link to reset your password:\n\n
+      ${resetUrl}\n\n
+      If you did not request this, please ignore this email and your password will remain unchanged.\n`;
 
     try {
       console.log('Attempting to send reset password email');
-      console.log('Email configuration:', {
-        to: user.email,
-        from: process.env.EMAIL_FROM,
-        subject: 'Password Reset Request - SpotDraft',
-        resetUrl: resetUrl,
-        environment: process.env.NODE_ENV
-      });
-
-      await sendEmail(user.email, 'Password Reset Request - SpotDraft', emailHtml);
+      await sendEmail(user.email, 'Password Reset Request - SpotDraft', emailText);
       console.log('Reset password email sent successfully');
       res.json({ 
         message: 'Password reset instructions have been sent to your email',
@@ -303,11 +223,36 @@ router.post('/reset-password-request', async (req, res) => {
   }
 });
 
+// Validate reset token
+router.get('/validate-reset-token/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
+    }
+
+    res.json({ valid: true });
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(500).json({ message: 'Error validating token' });
+  }
+});
+
 // Reset password
 router.post('/reset-password/:token', async (req, res) => {
   try {
     const { token } = req.params;
     const { password } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    }
 
     const user = await User.findOne({
       resetPasswordToken: token,
@@ -315,7 +260,7 @@ router.post('/reset-password/:token', async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired reset token' });
+      return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
     }
 
     // Hash new password
@@ -325,10 +270,10 @@ router.post('/reset-password/:token', async (req, res) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
-    res.json({ message: 'Password has been reset' });
+    res.json({ message: 'Password has been reset successfully' });
   } catch (error) {
-    console.error('Error in reset password:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Password reset error:', error);
+    res.status(500).json({ message: 'Error resetting password' });
   }
 });
 

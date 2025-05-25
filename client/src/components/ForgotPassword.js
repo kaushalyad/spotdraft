@@ -36,8 +36,14 @@ const ForgotPassword = () => {
     setError('');
     setLoading(true);
 
+    if (!email) {
+      setError('Please enter your email address');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch(`${config.API_URL}/auth/forgot-password`, {
+      const response = await fetch(`${config.API_URL}/auth/reset-password-request`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,6 +55,7 @@ const ForgotPassword = () => {
 
       if (response.ok) {
         setSuccess(true);
+        // Don't navigate immediately, let user see the success message
       } else {
         setError(data.message || 'Failed to send reset email');
       }
@@ -79,6 +86,7 @@ const ForgotPassword = () => {
           <Box sx={{ textAlign: 'center' }}>
             <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
               Password reset instructions have been sent to your email.
+              Please check your inbox and spam folder.
             </Alert>
             <Button
               variant="contained"
@@ -104,6 +112,8 @@ const ForgotPassword = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
+              error={!!error}
+              helperText={error}
             />
             <Button
               type="submit"
